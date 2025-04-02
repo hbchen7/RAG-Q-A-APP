@@ -24,16 +24,18 @@ import src.config.Tortoise
 #  import router -------------------------------------------------------
 from src.router.user  import userRouter
 from src.router.file import fileRouter
+from src.router.chat import ChatRouter
+from src.router.knowledge import KnowledgeRouter
 app.include_router(router=userRouter,prefix="/user",tags=["user"])
 app.include_router(router=fileRouter,prefix="/file",tags=["file"])
-
+app.include_router(router=ChatRouter,prefix="/chat",tags=["chat"])
+app.include_router(router=KnowledgeRouter,prefix="/knowledge",tags=["knowledge"])
 
 # 当访问路径为/ ，重定向路由到/docs
 @app.get("/")
 async def redirect_to_docs():
     return RedirectResponse(url="/docs")
-
-
+    
 
 #  静态文件  -----------------------------------------------------------
 from fastapi.staticfiles import StaticFiles
