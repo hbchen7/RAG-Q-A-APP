@@ -1,9 +1,7 @@
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from utils import embedding
-KnowledgeRouter = APIRouter()
-from router import file
+knowledgeRouter = APIRouter()
 from utils.Knowledge import Knowledge
 from utils.embedding import get_embedding
 
@@ -16,7 +14,7 @@ class embedding_config(BaseModel):
   file_path:str
   is_reorder:bool=False #reorder=False表示不对检索结果进行排序,因为太占用时间
 
-@KnowledgeRouter.post('/upload_knowledge',summary="上传知识库文件")
+@knowledgeRouter.post('/upload_knowledge',summary="上传知识库文件")
 def upload_knowledge(embedding_config: embedding_config):  
   # 创建_embedding实例
   _embedding=get_embedding(embedding_config.embedding_supplier,embedding_config.embedding_model)
