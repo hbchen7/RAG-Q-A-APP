@@ -15,13 +15,15 @@ class UserIn(BaseModel):
     username: str = Field(max_length=50, description="用户名")
     password: str = Field(max_length=20, description="密码")
     email: str = Field(max_length=100, description="邮箱")
-    nickname: str = Field(max_length=50, description="昵称")
+
+class UserLogin(BaseModel):
+    password: str = Field(max_length=20, description="密码")
+    email: str = Field(max_length=100, description="邮箱")
 
 class UserOut(BaseModel):
     id: str  # 修改为str类型，MongoDB使用ObjectId
     username: str
     email: str
-    nickname: str
 
 # JWT配置从环境变量获取
 SECRET_KEY: str = os.getenv("JWT_SECRET_KEY")  # type: ignore
@@ -48,9 +50,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-async def user_login(username: str = Form(), password: str = Form()):
-    user = await User.find_one(User.username == username)  # 改为Beanie查询
-    if not user or not verify_password(password, user.password):
+async def user_login(userLogin:UserLogin):
+    user = await User.find_one(User.email == userLogin.email)  # 改为Beanie查询
+    if not user or not verify_password(userLogin.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户名或密码错误",
@@ -61,7 +63,7 @@ async def user_login(username: str = Form(), password: str = Form()):
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer","user":userLogin}
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
@@ -77,7 +79,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise credentials_exception
     
-    user = await User.find_one(User.username == username)  # 改为Beanie查询
+    user = await User.find_one(User.username == username) 
     if user is None:
         raise credentials_exception
     return user
@@ -88,7 +90,6 @@ async def user_register(userin: UserIn):
         username=userin.username,
         password=hashed_password,
         email=userin.email,
-        nickname=userin.nickname
     )
-    await user.insert()  # 改为Beanie插入方式
+    await user.insert()  
     return user

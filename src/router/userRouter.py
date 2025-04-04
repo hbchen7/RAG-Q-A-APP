@@ -8,8 +8,8 @@ userRouter = APIRouter()
 
 # 登录接口
 @userRouter.post("/login", tags=["user"])
-async def login(username: str = Form(), password: str = Form()):
-    return await userSev.user_login(username, password)
+async def login(userLogin: userSev.UserLogin):
+    return await userSev.user_login(userLogin)
 
 # 注册接口
 @userRouter.post("/register", tags=["user"])

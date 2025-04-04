@@ -31,10 +31,11 @@ import src.middleware.resTime
 from src.router.userRouter  import userRouter
 from src.router.chatRouter import chatRouter
 from src.router.knowledgeRouter import knowledgeRouter
+from src.router.ConfigRouter import ConfigRouter
 app.include_router(router=userRouter,prefix="/user",tags=["user"])
 app.include_router(router=chatRouter,prefix="/chat",tags=["chat"])
 app.include_router(router=knowledgeRouter,prefix="/knowledge",tags=["knowledge"])
-
+app.include_router(router=ConfigRouter,prefix="/config",tags=["config"])
 # 当访问路径为/ ，重定向路由到/docs
 @app.get("/")
 async def redirect_to_docs():
