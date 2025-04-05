@@ -63,7 +63,7 @@ async def user_login(userLogin:UserLogin):
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer","user":userLogin}
+    return {"token": access_token, "token_type": "bearer","user":user}
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(

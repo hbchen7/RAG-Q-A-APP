@@ -24,7 +24,7 @@ class ChatConfig(BaseModel):
 
 class Chat(BaseModel):
   question: str="h1标签的“color”值是什么？"
-  chat_onfig:ChatConfig
+  chat_config:ChatConfig
   llm_config:LLMConfig 
   knowledge_config: Optional[KnowledgeConfig] = None
   
@@ -34,13 +34,14 @@ def hello(chat: Chat):
   if chat.knowledge_config is not None:
     _embedding=get_embedding(chat.knowledge_config.embedding_supplier,chat.knowledge_config.embedding_model)
     knowledge=Knowledge(_embedding,reorder=False)  # 实例化知识库 reorder=False表示不对检索结果进行排序,因为太占用时间了
-    chatSev = ChatSev(knowledge,chat.chat_onfig.chat_history_max_length)
+    chatSev = ChatSev(knowledge,chat.chat_config.chat_history_max_length)
     respone= chatSev.invoke(question=chat.question,supplier=chat.llm_config.supplier, collection=chat.knowledge_config.collection, model=chat.llm_config.model,)
   else:
-    chatSev = ChatSev(None, chat.chat_onfig.chat_history_max_length)
+    chatSev = ChatSev(None, chat.chat_config.chat_history_max_length)
     respone= chatSev.invoke(question=chat.question,supplier=chat.llm_config.supplier, collection=None, model=chat.llm_config.model,)
   print(respone)
-  return respone.answer
+  print(respone['answer'])
+  return respone['answer']
 
 
 
