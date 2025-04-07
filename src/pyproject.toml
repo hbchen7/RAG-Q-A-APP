@@ -1,6 +1,0 @@
-[tool.aerich]
-tortoise_orm = "settings.PostgreSQLConfig"
-location = "./migrations"
-src_folder = "./."
-line-length = 80
-target-version = ['py310']

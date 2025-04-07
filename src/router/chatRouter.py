@@ -7,7 +7,7 @@ from src.utils.embedding import get_embedding
 
 chatRouter = APIRouter()
 class LLMConfig(BaseModel):
-  supplier: Literal["ollama", "openai", "siliconflow"]  # 这里可以根据实际需求添加或修改固定字符串值
+  supplier: Literal["ollama", "openai", "siliconflow","oneapi"]  # 这里可以根据实际需求添加或修改固定字符串值
   model:str="deepseek-r1:latest"
   apiKey:Optional[str]=None
   # max_length: Optional[int] = 10086  
