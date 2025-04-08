@@ -5,6 +5,9 @@
 - Python 3.10.6
 - FastAPI // web 框架
 - unicorn // web 服务框架
+- pdm // 包管理工具
+- chroma // 向量数据库
+- Beanie // MongoDB ORM
 
 # 项目结构
 

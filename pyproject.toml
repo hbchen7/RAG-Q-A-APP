@@ -32,6 +32,7 @@ dev = [
 # 启用 Flake8 的所有规则 (F 代码) 和 isort 的规则 (I 代码)
 # 你可以根据需要添加或删除规则代码: https://docs.astral.sh/ruff/rules/
 select = ["F", "I"]
+line-length = 88  # 设置每行最大长度
 
 # 忽略特定规则 (如果需要)
 # ignore = ["F401"] # 例如，忽略 "未使用导入"
@@ -39,14 +40,14 @@ select = ["F", "I"]
 # 设置目标 Python 版本，这有助于 Ruff 应用特定版本的规则
 target-version = "py310"  # 根据你的 requires-python = ">=3.10" 设置
 
-# 配置 Ruff 的代码格式化功能
 [tool.ruff.format]
-# 设置每行最大长度
-line-length = 88 # Black 的默认值是 88，这是一个常见选择，但你可以改为 80 或其他值
 # 如果你想使用 Black 兼容的格式化风格（推荐）
-# preview = true # 启用预览版功能，未来可能成为默认
+quote-style = "double"  # 使用双引号
+indent-style = "space"  # 使用空格缩进
+skip-magic-trailing-comma = false  # 保持与 Black 一致的尾随逗号处理
+line-ending = "auto"  # 自动处理换行符
 
 # 配置 Ruff 的 import 排序功能 (类似 isort)
 [tool.ruff.lint.isort]
 # 如果你的项目有 src 目录，将它添加到已知的第一方包路径中
-# known-first-party = ["src"] # 取消注释并根据你的项目结构调整
+known-first-party = ["src"]  # 取消注释并根据你的项目结构调整

@@ -8,9 +8,16 @@ from langchain_openai import ChatOpenAI
 from langchain_openai.chat_models.base import BaseChatOpenAI
 
 load_dotenv()
+ONEAPI_BASE_URL = os.getenv("ONEAPI_BASE_URL")
 
 
-def get_llms(supplier: str, model: str, max_length: int, temperature: float = 0.8):
+def get_llms(
+    supplier: str,
+    model: str,
+    api_key: str = None,
+    max_length: int = 10,
+    temperature: float = 0.8,
+):
     if supplier == "openai":
         return ChatOpenAI(model=model, temperature=temperature)
     elif supplier == "siliconflow":
@@ -25,9 +32,10 @@ def get_llms(supplier: str, model: str, max_length: int, temperature: float = 0.
         return ChatOllama(model=model)
     elif supplier == "oneapi":
         return ChatOpenAI(
-            api_key="sk-TYPLGOAjVwsV1mEO0eE3A22b046a444bA3CdEc51AdAf7dE0",
-            base_url="http://localhost:3000/v1",
-            model="Qwen/Qwen2.5-7B-Instruct",
+            # api_key="sk-TYPLGOAjVwsV1mEO0eE3A22b046a444bA3CdEc51AdAf7dE0",
+            api_key=api_key,
+            base_url=ONEAPI_BASE_URL,
+            model=model,
             temperature=temperature,
         )
     else:
