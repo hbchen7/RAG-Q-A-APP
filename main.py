@@ -3,13 +3,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from starlette.responses import RedirectResponse
 
-from src.config.Beanie import init_db  # 新增导入
+from src.config.Beanie import init_db
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 初始化数据库
-    await init_db()  # 新增初始化
+    await init_db()
     yield
 
 
@@ -33,15 +32,19 @@ app.middleware("http")(request_info_middleware)
 # 响应时间中间件
 
 #  import router -------------------------------------------------------
-from src.router.chatRouter import chatRouter
+from src.router.auth import AuthRouter
+from src.router.chatRouter import ChatRouter
 from src.router.ConfigRouter import ConfigRouter
 from src.router.knowledgeRouter import knowledgeRouter
-from src.router.userRouter import userRouter
+from src.router.sessionRouter import SessionRouter
+from src.router.userRouter import UserRouter
 
-app.include_router(router=userRouter, prefix="/user", tags=["user"])
-app.include_router(router=chatRouter, prefix="/chat", tags=["chat"])
+app.include_router(router=AuthRouter)
+app.include_router(router=UserRouter, prefix="/user", tags=["user"])
+app.include_router(router=ChatRouter, prefix="/chat", tags=["chat"])
 app.include_router(router=knowledgeRouter, prefix="/knowledge", tags=["knowledge"])
 app.include_router(router=ConfigRouter, prefix="/config", tags=["config"])
+app.include_router(router=SessionRouter, prefix="/session", tags=["session"])
 
 
 # 当访问路径为/ ，重定向路由到/docs

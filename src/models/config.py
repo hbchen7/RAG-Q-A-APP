@@ -1,28 +1,30 @@
-from beanie import Document, Indexed
-from pydantic import Field
 from typing import Literal, Optional
 
-class UserLLMConfig(Document):
-  username: Indexed(str) = Field(..., max_length=50)  # type:ignore
-  supplier: Literal["ollama", "openai", "siliconflow"]  
-  model:str
-  apiKey:Optional[str]=None
-  
-  class Settings:
-      name = "userLLMConfig"
+from beanie import Document, Indexed
+from pydantic import Field
 
-  def __str__(self):
-      return f"{self.username} - {self.supplier} - {self.model}"
+
+class UserLLMConfig(Document):
+    username: Indexed(str) = Field(..., max_length=50)  # type:ignore
+    supplier: Literal["ollama", "openai", "siliconflow"]
+    model: str
+    apiKey: Optional[str] = None
+
+    class Settings:
+        name = "userLLMConfig"
+
+    def __str__(self):
+        return f"{self.username} - {self.supplier} - {self.model}"
+
 
 class UserEnbeddingConfig(Document):
-  username: Indexed(str) = Field(..., max_length=50)  # type:ignore
-  supplier: Literal["ollama", "openai", "siliconflow"]  
-  model:str
-  apiKey:Optional[str]=None
+    username: Indexed(str) = Field(..., max_length=50)  # type:ignore
+    supplier: Literal["ollama", "openai", "siliconflow"]
+    model: str
+    apiKey: Optional[str] = None
 
-  class Settings:
-      name = "userEnbeddingConfig"
+    class Settings:
+        name = "userEnbeddingConfig"
 
-  def __str__(self):
-      return f"{self.username} - {self.supplier} - {self.model}"
-
+    def __str__(self):
+        return f"{self.username} - {self.supplier} - {self.model}"

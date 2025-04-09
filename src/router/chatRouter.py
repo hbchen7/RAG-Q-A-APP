@@ -7,7 +7,7 @@ from src.service.ChatSev import ChatSev
 from src.utils.embedding import get_embedding
 from src.utils.Knowledge import Knowledge
 
-chatRouter = APIRouter()
+ChatRouter = APIRouter()
 
 
 class LLMConfig(BaseModel):
@@ -35,14 +35,17 @@ class ChatConfig(BaseModel):
 
 
 class Chat(BaseModel):
-    question: str = "h1标签的“color”值是什么？"
+    question: str = "你好"
+    session_id: str
     chat_config: ChatConfig
     llm_config: LLMConfig
     knowledge_config: Optional[KnowledgeConfig] = None
 
 
 # 对话
-@chatRouter.post("/hello", summary="AI Chat")
+@ChatRouter.post(
+    "/hello", summary="AI Chat", description="如果使用oneapi,需要oneapi的cookie才能调用"
+)
 def hello(chat: Chat):
     if chat.knowledge_config is not None:
         _embedding = get_embedding(
@@ -52,10 +55,11 @@ def hello(chat: Chat):
         )
         knowledge = Knowledge(
             _embedding, reorder=False
-        )  # 实例化知识库 reorder=False表示不对检索结果进行排序,因为太占用时间了
+        )  # 实例化知识库 reorder=False表示不对检索结果进行重排序,因为太占用时间了
         chatSev = ChatSev(knowledge, chat.chat_config.chat_history_max_length)
         respone = chatSev.invoke(
             question=chat.question,
+            session_id=chat.session_id,
             api_key=chat.llm_config.api_key,
             supplier=chat.llm_config.supplier,
             collection=chat.knowledge_config.collection,
@@ -65,11 +69,11 @@ def hello(chat: Chat):
         chatSev = ChatSev(None, chat.chat_config.chat_history_max_length)
         respone = chatSev.invoke(
             question=chat.question,
+            session_id=chat.session_id,
             api_key=chat.llm_config.api_key,
             supplier=chat.llm_config.supplier,
             collection=None,
             model=chat.llm_config.model,
         )
     print(respone)
-    print(respone["answer"])
     return respone["answer"]
