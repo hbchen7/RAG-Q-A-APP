@@ -34,7 +34,9 @@ class ChatSev:
     # _chat_history = ChatMessageHistory()  # 对话历史
 
     def __init__(
-        self, knowledge: Optional[Knowledge], chat_history_max_length: Optional[int] = 8
+        self,
+        knowledge: Optional[Knowledge] = None,
+        chat_history_max_length: Optional[int] = 8,
     ):
         self.knowledge: Optional[Knowledge] = knowledge
         # chat_history_max_length 对于数据库存储可能不再直接相关，但保留以备将来使用
