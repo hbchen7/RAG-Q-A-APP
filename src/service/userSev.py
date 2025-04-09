@@ -18,8 +18,8 @@ class UserIn(BaseModel):
 
 
 class UserLogin(BaseModel):
+    username: str = Field(max_length=50, description="用户名")
     password: str = Field(max_length=20, description="密码")
-    email: str = Field(max_length=100, description="邮箱")
 
 
 class UserOut(BaseModel):
@@ -32,9 +32,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
 async def user_login(userLogin: UserLogin):
-    user = await User.find_one(User.email == userLogin.email)
+    user = await User.find_one(User.username == userLogin.username)
     print(user)
-    print(user.id)
     if not user or not verify_password(userLogin.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -28,3 +28,7 @@ pdm install -r requirements.txt
 ## 运行项目
 uvicorn main:app --reload
 ```
+
+# 相关项目-特此鸣谢
+
+- [One API](https://github.com/songquanpeng/one-api)
