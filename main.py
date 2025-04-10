@@ -32,6 +32,7 @@ app.middleware("http")(request_info_middleware)
 # 响应时间中间件
 
 #  import router -------------------------------------------------------
+from src.router.assistantRouter import AssistantRouter
 from src.router.auth import AuthRouter
 from src.router.chatRouter import ChatRouter
 from src.router.ConfigRouter import ConfigRouter
@@ -45,6 +46,7 @@ app.include_router(router=ChatRouter, prefix="/chat", tags=["chat"])
 app.include_router(router=knowledgeRouter, prefix="/knowledge", tags=["knowledge"])
 app.include_router(router=ConfigRouter, prefix="/config", tags=["config"])
 app.include_router(router=SessionRouter, prefix="/session", tags=["session"])
+app.include_router(router=AssistantRouter, prefix="/assistant", tags=["assistant"])
 
 
 # 当访问路径为/ ，重定向路由到/docs

@@ -1,16 +1,18 @@
-from datetime import datetime  # 导入datetime类
-from typing import Annotated, Optional
+from datetime import datetime
+from typing import Annotated
 
 from beanie import Document, Indexed
-from pydantic import Field
 
 
 class Session(Document):
     title: str = "新会话"  # 会话标题
     username: Annotated[str, Indexed(unique=True)]  # 用户名
-    date: datetime = Field(default_factory=datetime.now)  # 会话创建日期
-    assistant_id: Optional[str] = None  # 助手ID
-    assistant_name: Optional[str] = None  # 助手名称
+    assistant_id: str  # 助手ID
+    created_at: datetime = datetime.now()  # 创建时间
+    updated_at: datetime = datetime.now()  # 更新时间
 
     class Settings:
         name = "sessions"
+        indexes = [
+            [("updated_at", -1)],  # -1 表示降序索引
+        ]

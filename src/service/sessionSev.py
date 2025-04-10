@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 
 from beanie import PydanticObjectId
 from fastapi import HTTPException
@@ -11,8 +11,7 @@ from src.service.ChatSev import ChatSev
 class SessionCreate(BaseModel):
     title: str = "新会话"
     username: str = "root"
-    assistant_id: Optional[str] = None
-    assistant_name: Optional[str] = None
+    assistant_id: str
 
 
 async def create_session(

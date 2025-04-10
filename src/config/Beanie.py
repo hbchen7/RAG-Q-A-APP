@@ -4,6 +4,7 @@ from beanie import init_beanie
 from motor.motor_asyncio import AsyncIOMotorClient
 
 #   导入所有文档模型类
+from src.models.assistant import Assistant
 from src.models.config import UserEnbeddingConfig, UserLLMConfig
 from src.models.session import Session
 from src.models.user import User
@@ -28,5 +29,6 @@ async def init_db():
             UserLLMConfig,
             UserEnbeddingConfig,
             Session,
+            Assistant,
         ],  # 添加所有文档模型类
     )

@@ -12,9 +12,7 @@ from src.utils.jwt import (  # 引入 Token 工具
 )
 from src.utils.pwdHash import verify_password  # 引入密码验证工具
 
-AuthRouter = APIRouter(
-    tags=["Authentication"],  # 为接口文档添加标签
-)
+AuthRouter = APIRouter()
 
 
 @AuthRouter.post("/token")
