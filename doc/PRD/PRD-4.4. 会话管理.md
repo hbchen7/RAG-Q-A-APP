@@ -27,9 +27,9 @@
   - **关联数据处理:** PRD 需要记录：删除会话时，系统会调用 `ChatSev.clear_history` 清除该会话的聊天记录。
 
 - **FR-SESS-005: 查看会话历史消息**
-  - **API:** 目前的代码中似乎没有提供明确的 API 来获取单个会话的详细历史消息列表。这个功能是如何实现的？是包含在 RAG 问答流程中，还是需要一个单独的 API (例如 `GET /session/{session_id}/messages`)？[后者,需要单独的 API]
-  - **分页:** 如果历史消息很多，是否需要分页加载？每次加载多少条？
-  - **显示格式:** 聊天记录通常需要显示 quién (用户或 AI)、内容、时间戳等。
+  - **API:** 目前的代码中似乎没有提供明确的 API 来获取单个会话的详细历史消息列表。这个功能是如何实现的？是包含在 RAG 问答流程中，还是需要一个单独的 API (例如 `GET /session/{session_id}/messages`)？[后者,需要单独的 API,现已经开发完成，可见 src/routers/session.py,具体的实现函数是 src/service/sessionSev.py 的 get_session_histoory]
+  - **分页:** 如果历史消息很多，是否需要分页加载？每次加载多少条？[是的，根据具体的实现函数是 src/service/sessionSev.py 的 get_session_histoory，前端传递 session_id 和 page 参数即可实现分页加载]
+  - **显示格式:** 聊天记录通常需要显示 quién (用户或 AI)、内容、时间戳等[在前端中，用户发送的消息在右侧蓝色消息气泡中，ai 发送的消息在左侧白色消息气泡，暂不需要显示时间戳]。
 
 ---
 

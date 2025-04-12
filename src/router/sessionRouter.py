@@ -13,8 +13,8 @@ async def create_session(session: sessionSev.SessionCreate):
 
 # 获取用户会话列表
 @SessionRouter.get("/list", summary="获取用户会话列表")
-async def get_session_list(username: str):
-    return await sessionSev.get_session_list(username)
+async def get_session_list(username: str, assistant_id: str):
+    return await sessionSev.get_session_list(username, assistant_id)
 
 
 # 修改会话标题

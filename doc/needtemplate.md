@@ -96,19 +96,77 @@
 ### 4.3. 助手管理
 
 - **FR-ASST-001:** 创建助手
-  - 必填/可选字段：(名称, 用户名, Prompt, 关联知识库 ID)
-  - 默认值：
-- **FR-ASST-002:** 查看用户拥有的助手列表 (显示名称？关联知识库？)
-- **FR-ASST-003:** 编辑助手 (允许修改哪些字段？)
-- **FR-ASST-004:** 删除助手 (删除时是否需要确认？关联的会话如何处理？- 已实现)
+
+  - **输入:** 前端需提供 `username` (来自登录状态)。可选择性提供 `title`, `prompt`, `knowledge_Id`。
+  - **处理:** 如果未提供 `title`, `prompt`, 则使用默认值。
+  - **必填/可选字段:** `username` (必填), `title` (可选), `prompt` (可选), `knowledge_Id` (可选)
+  - **默认值:** `title`: "新助手", `prompt`: "你是一个 AI 助手，请根据用户的问题给出回答。"
+  - **输出:** 返回创建的助手对象。
+  - **约束:** 一个用户可以创建多个助手。
+
+- **FR-ASST-002:** 查看用户拥有的助手列表
+
+  - **输入:** `username` (来自 Query 参数)。
+  - **处理:** 查询该 `username` 下的所有助手，并按 `created_at` **升序** 排序 (最新的在后)。
+  - **输出:** 返回包含助手所有字段信息的列表 (`id`, `title`, `username`, `prompt`, `knowledge_Id`, `created_at`)。
+
+- **FR-ASST-003:** 编辑助手
+
+  - **输入:** `assistant_id` (来自 Path 参数), 请求体包含 `title`, `prompt`, `knowledge_Id` (不允许修改 `username`)。
+  - **处理:** 查找指定 `assistant_id` 的助手，更新其 `title`, `prompt`, `knowledge_Id` 字段。
+  - **输出:** 返回更新后的助手对象。
+  - **约束:** 仅允许修改 `title`, `prompt`, `knowledge_Id`。
+
+- **FR-ASST-004:** 删除助手
+  - **输入:** `assistant_id` (来自 Query 参数)。
+  - **交互:** 前端需弹出确认框，提示用户"确定要删除助手 [助手名称] 及其所有会话记录吗？"
+  - **处理:**
+    1.  查找指定 `assistant_id` 的助手。
+    2.  查找所有关联的 `Session` (通过 `Session.assistant_id == assistant_id`)。
+    3.  遍历关联的 `Session`，对每个 `session_id` 调用 `ChatSev.clear_history` 清除聊天记录，然后删除 `Session` 文档。
+    4.  删除 `Assistant` 文档。
+  - **输出:** 返回成功消息。
 
 ### 4.4. 会话管理
 
-- **FR-SESS-001:** 创建新会话 (基于哪个助手创建？默认标题？)
-- **FR-SESS-002:** 查看用户会话列表 (按助手分组？显示标题和时间？)
-- **FR-SESS-003:** 修改会话标题
-- **FR-SESS-004:** 删除会话 (同时删除历史消息 - 已实现)
-- **FR-SESS-005:** 查看会话历史消息 (分页加载？显示格式？)
+- **FR-SESS-001:** 创建新会话
+
+  - **输入:** 请求体包含 `username` (来自登录状态), `assistant_id`。可选择性提供 `title`。
+  - **处理:** 使用提供的字段和默认值创建新的 `Session` 文档。
+  - **必填/可选字段:** `username` (必填), `assistant_id` (必填), `title` (可选)。
+  - **默认值:** `title`: "新会话"。
+  - **输出:** 返回创建的会话对象。
+  - **约束:** 一个用户可以拥有多个会话，每个会话必须关联一个助手。
+
+- **FR-SESS-002:** 查看用户会话列表
+
+  - **输入:** `username` (来自 Query 参数)。
+  - **处理:** 查询该 `username` 下的所有会话，并按 `updated_at` **降序** 排序 (最近更新的在前)。
+  - **输出:** 返回会话列表，包含 `id`, `title`, `username`, `assistant_id`, `created_at`, `updated_at` 字段。
+  - **前端展示:** 前端界面会将此列表按 `assistant_id` 分组显示。列表项主要显示 `title` 和 `updated_at` (用于计算相对时间，如"几天前")。
+
+- **FR-SESS-03:** 修改会话标题
+
+  - **输入:** `session_id` (来自 Path 参数), `title` (来自 Query 参数或请求体)。
+  - **处理:** 查找指定 `session_id` 的会话，更新其 `title` 和 `updated_at` 字段。
+  - **输出:** 返回更新后的会话对象。
+
+- **FR-SESS-004:** 删除会话
+
+  - **输入:** `session_id` (来自 Path 参数)。
+  - **交互:** 前端需弹出确认框，提示用户"确定要删除此会话及其所有历史记录吗？"
+  - **处理:**
+    1.  查找指定 `session_id` 的会话。
+    2.  调用 `ChatSev.clear_history` 清除该 `session_id` 的聊天记录。
+    3.  删除 `Session` 文档。
+  - **输出:** 返回成功消息。
+
+- **FR-SESS-005:** 查看会话历史消息
+  - **API:** 使用 `GET /session/{session_id}/history` 端点。
+  - **输入:** `session_id` (来自 Path 参数), `page` (Query 参数, 默认为 1), `page_size` (Query 参数, 默认为 10)。
+  - **处理:** 服务端根据 `session_id` 查询 `ChatHistoryMessage` 集合，按 `_id` (或时间戳) 降序排列，进行分页。
+  - **输出:** 返回包含分页信息 (`page`, `size`, `total_pages`, `total_items`) 和当前页消息列表 (`items`) 的 JSON 对象。`items` 列表中的每个消息包含 `type` ('human' 或 'ai') 和 `content`。
+  - **前端展示:** 聊天界面根据 `type` 区分用户和 AI 消息（例如左右气泡），显示 `content`。暂不需要显示时间戳。
 
 ### 4.5. RAG 问答流程
 

@@ -1,6 +1,7 @@
 import json
 import math
 import traceback  # 导入 traceback 模块
+from datetime import datetime  # 确保导入 datetime
 from typing import Any, Dict, List  # 确保导入 Dict 和 Any
 
 from beanie import PydanticObjectId
@@ -43,20 +44,26 @@ async def create_session(
     return session_doc
 
 
-async def get_session_list(username: str) -> List[Session]:
+async def get_session_list(username: str, assistant_id: str) -> List[Session]:
     """
-    根据用户名获取该用户的所有会话列表。
+    根据用户名和可选的助手 ID 获取会话列表。
 
     Args:
         username: 用户名。
+        assistant_id: (可选) 助手 ID。如果提供，则只返回与该助手关联的会话。
 
     Returns:
-        该用户的 Session 文档对象列表。
+        符合条件的 Session 文档对象列表，按更新时间降序排序。
     """
-    # 使用 find 方法查询 username 匹配的所有会话，并按日期降序排序
-    sessions = (
-        await Session.find(Session.username == username).sort(-Session.date).to_list()
-    )
+    # 构建基础查询
+    query = Session.find(Session.username == username)
+
+    # 如果提供了 assistant_id，添加过滤条件
+    if assistant_id is not None:
+        query = query.find(Session.assistant_id == assistant_id)
+
+    # 执行查询并排序
+    sessions = await query.sort(-Session.updated_at).to_list()
     return sessions
 
 
@@ -84,6 +91,7 @@ async def update_session_title(session_id: str, title: str) -> Session:
         raise HTTPException(status_code=404, detail="找不到指定的会话")
 
     session.title = title
+    session.updated_at = datetime.now()  # 更新 updated_at 字段
     await session.save()
     return session
 

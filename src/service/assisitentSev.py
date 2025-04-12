@@ -1,13 +1,10 @@
-import json
-import math
-from typing import Any, Dict, List
+from typing import List
 
 from beanie import PydanticObjectId
 from fastapi import HTTPException
 from pydantic import BaseModel
 
 from src.models.assistant import Assistant
-from src.models.chat_history import ChatHistoryMessage
 from src.models.session import Session
 from src.service.ChatSev import ChatSev
 
@@ -59,7 +56,7 @@ async def get_assistant_list(username: str) -> List[Assistant]:
     """
     assistants = (
         await Assistant.find(Assistant.username == username)
-        .sort(-Assistant.created_at)
+        .sort(Assistant.created_at)
         .to_list()
     )
     return assistants
