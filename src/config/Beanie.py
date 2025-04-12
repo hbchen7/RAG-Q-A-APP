@@ -5,6 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 #   导入所有文档模型类
 from src.models.assistant import Assistant
+from src.models.chat_history import ChatHistoryMessage
 from src.models.config import UserEnbeddingConfig, UserLLMConfig
 from src.models.session import Session
 from src.models.user import User
@@ -30,5 +31,6 @@ async def init_db():
             UserEnbeddingConfig,
             Session,
             Assistant,
+            ChatHistoryMessage,
         ],  # 添加所有文档模型类
     )

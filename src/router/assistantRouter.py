@@ -45,7 +45,7 @@ async def update_assistant(
 
 # 删除助手
 @AssistantRouter.delete("/assistant", summary="删除助手")
-async def delete_assistant(assistant_id: str):
+async def delete_assistant_(assistant_id: str):
     """删除助手
     assistant_id: 助手ID
 
