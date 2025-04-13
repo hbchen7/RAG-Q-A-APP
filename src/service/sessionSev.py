@@ -185,7 +185,8 @@ async def get_session_history(
 
         # 5. 解析 History 字符串并格式化输出
         items = []
-        for doc in history_docs:
+        # 倒序遍历数组
+        for doc in reversed(history_docs):
             try:
                 # 解析 History 字段中的 JSON 字符串
                 history_data = json.loads(doc.history_str)
@@ -195,7 +196,13 @@ async def get_session_history(
                 message_content = history_data.get("data", {}).get("content")
 
                 if message_type and message_content is not None:
-                    items.append({"type": message_type, "content": message_content})
+                    items.append(
+                        {
+                            "id": str(doc.id),
+                            "type": message_type,
+                            "content": message_content,
+                        }
+                    )
                 else:
                     # 如果解析出的数据结构不符合预期，记录警告
                     print(f"警告: 解析历史记录时缺少 type 或 content, doc_id: {doc.id}")
