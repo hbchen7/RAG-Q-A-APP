@@ -36,6 +36,7 @@ class ChatSev:
     def __init__(
         self,
         knowledge: Optional[Knowledge] = None,
+        prompt: str | None = None,
         chat_history_max_length: Optional[int] = 8,
     ):
         self.knowledge: Optional[Knowledge] = knowledge
@@ -53,15 +54,15 @@ class ChatSev:
         self.mongo_collection_name = os.getenv(
             "MONGODB_COLLECTION_NAME_CHATHISTORY", "chatHistoy"
         )  # 修改为 chatHistoy
-
+        self.prompt = prompt
         self.knowledge_prompt = None  # 问答模板
         self.normal_prompt = None  # 正常模板
         self.create_chat_prompt()  # 创建聊天模板
 
     def create_chat_prompt(self) -> None:
-        ai_info = "你叫超级无敌霸王龙🦖，一个帮助人们解答各种问题的助手。"
+        ai_info = self.prompt if self.prompt else "你是一个帮助人们解答各种问题的助手。"
 
-        # AI系统prompt
+        # 知识库prompt--system
         knowledge_system_prompt = (
             f"{ai_info} 当用户向你提问，请你使用下面检索到的上下文来回答问题。如果检索到的上下文中没有问题的答案，请你直接回答不知道。检索到的上下文如下：\n\n"
             "{context}"

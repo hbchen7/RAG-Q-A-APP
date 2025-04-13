@@ -6,7 +6,7 @@ from beanie import Document, Indexed
 
 class Session(Document):
     title: str = "新会话"  # 会话标题
-    username: Annotated[str, Indexed(unique=True)]  # 用户名
+    username: Annotated[str, Indexed]  # 用户名
     assistant_id: str  # 助手ID
     created_at: datetime = datetime.now()  # 创建时间
     updated_at: datetime = datetime.now()  # 更新时间

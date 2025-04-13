@@ -11,7 +11,7 @@ from src.service.ChatSev import ChatSev
 
 class AssistantRequest(BaseModel):
     title: str = "新助手"
-    username: str = "root"  # 用户名
+    username: str
     prompt: str = "你是一个AI助手，请根据用户的问题给出回答。"
     knowledge_Id: str | None = None
 

@@ -37,6 +37,7 @@ class ChatConfig(BaseModel):
 class Chat(BaseModel):
     question: str = "你好"
     session_id: str
+    prompt: str | None = None
     chat_config: ChatConfig
     llm_config: LLMConfig
     knowledge_config: Optional[KnowledgeConfig] = None
@@ -47,6 +48,16 @@ class Chat(BaseModel):
     "/hello", summary="AI Chat", description="如果使用oneapi,需要oneapi的cookie才能调用"
 )
 def hello(chat: Chat):
+    """
+    对话
+    :param question: 用户提出的问题 例如: '请问你是谁？'
+    :param session_id: 会话ID
+    :param prompt: 提示词
+    :param chat_config: 聊天配置
+    :param llm_config: 模型配置
+    :param knowledge_config: 知识库配置
+    """
+    # 是否选择使用知识库
     if chat.knowledge_config is not None:
         _embedding = get_embedding(
             chat.knowledge_config.embedding_supplier,
@@ -56,7 +67,11 @@ def hello(chat: Chat):
         knowledge = Knowledge(
             _embedding, reorder=False
         )  # 实例化知识库 reorder=False表示不对检索结果进行重排序,因为太占用时间了
-        chatSev = ChatSev(knowledge, chat.chat_config.chat_history_max_length)
+        chatSev = ChatSev(
+            knowledge,
+            chat.prompt,
+            chat.chat_config.chat_history_max_length,
+        )
         respone = chatSev.invoke(
             question=chat.question,
             session_id=chat.session_id,
@@ -65,8 +80,9 @@ def hello(chat: Chat):
             collection=chat.knowledge_config.collection,
             model=chat.llm_config.model,
         )
+    # 不使用知识库
     else:
-        chatSev = ChatSev(None, chat.chat_config.chat_history_max_length)
+        chatSev = ChatSev(None, chat.prompt, chat.chat_config.chat_history_max_length)
         respone = chatSev.invoke(
             question=chat.question,
             session_id=chat.session_id,

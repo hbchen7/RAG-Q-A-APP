@@ -6,7 +6,7 @@ AssistantRouter = APIRouter()
 
 
 # 创建助手
-@AssistantRouter.post("/assistant", summary="创建助手")
+@AssistantRouter.post("/create", summary="创建助手")
 async def create_assistant(assistant: assisitentSev.AssistantRequest):
     """创建助手
     title: 助手标题
@@ -19,7 +19,7 @@ async def create_assistant(assistant: assisitentSev.AssistantRequest):
 
 # 获取助手列表
 @AssistantRouter.get(
-    "/assistant",
+    "/list",
     summary="获取助手列表",
 )
 async def get_assistant_list(username: str):
@@ -29,8 +29,7 @@ async def get_assistant_list(username: str):
     return await assisitentSev.get_assistant_list(username)
 
 
-# 更新助手
-@AssistantRouter.put("/assistant/{assistant_id}", summary="更新助手")
+@AssistantRouter.put("/update/{assistant_id}", summary="更新助手")
 async def update_assistant(
     assistant_id: str, assistant: assisitentSev.AssistantRequest
 ):
@@ -44,7 +43,7 @@ async def update_assistant(
 
 
 # 删除助手
-@AssistantRouter.delete("/assistant", summary="删除助手")
+@AssistantRouter.delete("/delete/{assistant_id}", summary="删除助手")
 async def delete_assistant_(assistant_id: str):
     """删除助手
     assistant_id: 助手ID

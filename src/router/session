@@ -1,0 +1,271 @@
+// filepath: src/stores/modules/session.js
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+import { ElMessage } from 'element-plus'
+import {
+  createSessionAPI,
+  getSessionListAPI, // 假设此 API 后续会支持 assistant_id 参数
+  updateSessionTitleAPI,
+  deleteSessionAPI,
+} from '@/api/sessionAPI'
+import { useAuthStore } from './auth' // 引入 auth store
+import { useAssistantStore } from './assistant' // 引入 assistant store
+
+export const useSessionStore = defineStore(
+  'session',
+  () => {
+    const authStore = useAuthStore() // 获取 auth store 实例
+    const assistantStore = useAssistantStore() // 获取 assistant store 实例
+
+    // --- State ---
+    /**
+     * @type {import('vue').Ref<Array<object>>}
+     * @description 当前选中助手的会话列表
+     */
+    const sessionsList = ref([])
+    /**
+     * @type {import('vue').Ref<object|null>}
+     * @description 当前选中的会话对象
+     */
+    const currentSession = ref(null)
+    /**
+     * @type {import('vue').Ref<boolean>}
+     * @description 加载状态
+     */
+    const loading = ref(false)
+    /**
+     * @type {import('vue').Ref<string|null>}
+     * @description 错误信息
+     */
+    const error = ref(null)
+
+    // --- Getters ---
+    const getSessionsList = computed(() => sessionsList.value)
+    const getCurrentSession = computed(() => currentSession.value)
+    const isLoading = computed(() => loading.value)
+    const getError = computed(() => error.value)
+
+    // --- Actions ---
+    const setLoading = (status) => {
+      loading.value = status
+    }
+
+    const setError = (err) => {
+      error.value = err ? (err instanceof Error ? err.message : String(err)) : null
+      if (error.value) {
+        console.error('Session Store Error:', error.value)
+      }
+    }
+
+    /**
+     * @description 获取当前选中助手的会话列表
+     * @param {string} assistantId - 助手的 ID
+     */
+    const fetchSessionList = async (assistantId) => {
+      if (!authStore.user) {
+        setError('用户未登录，无法获取会话列表')
+        // ElMessage.error('请先登录')
+        sessionsList.value = [] // 清空列表
+        currentSession.value = null // 清空选中
+        return
+      }
+      if (!assistantId) {
+        // setError('未指定助手，无法获取会话列表') // 或者静默处理
+        sessionsList.value = [] // 清空列表
+        currentSession.value = null // 清空选中
+        return
+      }
+
+      setLoading(true)
+      setError(null)
+      try {
+        // 调用 API，假设 getSessionListAPI 后续会支持 assistant_id
+        const response = await getSessionListAPI({
+          username: authStore.user.username,
+          assistant_id: assistantId, // 传递 assistant_id
+        })
+        sessionsList.value = response || [] // 后端直接返回列表
+
+        // 列表获取后，检查并设置默认选中项
+        // 只有在当前没有选中会话，或者当前选中的会话不在新列表里时，才默认选第一个
+        if (
+          sessionsList.value.length > 0 &&
+          (!currentSession.value ||
+            !sessionsList.value.find((s) => s.id === currentSession.value.id))
+        ) {
+          setCurrentSession(sessionsList.value[0])
+        } else if (sessionsList.value.length === 0) {
+          // 如果列表为空，清除选中
+          setCurrentSession(null)
+        }
+      } catch (err) {
+        setError(err)
+        ElMessage.error(error.value || '获取会话列表失败')
+        sessionsList.value = [] // 出错时清空列表
+        currentSession.value = null // 清空选中
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    /**
+     * @description 创建一个新的会话 (为当前选中的助手)
+     * @param {object} sessionData - 创建会话所需的数据 (可选，如 title)
+     * @param {string} [sessionData.title='新会话'] - 会话标题
+     * @returns {Promise<object|null>} 返回创建成功的会话对象或 null
+     */
+    const createSession = async (sessionData = {}) => {
+      const currentAssistantId = assistantStore.currentAssistant?.id
+      if (!authStore.user) {
+        setError('用户未登录，无法创建会话')
+        ElMessage.error('请先登录')
+        return null
+      }
+      if (!currentAssistantId) {
+        setError('请先选择一个助手')
+        ElMessage.warning('请先选择一个助手才能创建会话')
+        return null
+      }
+
+      setLoading(true)
+      setError(null)
+      try {
+        const dataToSend = {
+          username: authStore.user.username,
+          title: sessionData.title || '新会话',
+          assistant_id: currentAssistantId, // 使用当前选中的助手 ID
+        }
+        const newSession = await createSessionAPI(dataToSend)
+        ElMessage.success(`会话 "${newSession.title}" 创建成功`)
+
+        // 创建成功后，重新获取当前助手的列表以包含新会话
+        await fetchSessionList(currentAssistantId) // 传入当前助手 ID
+
+        // 查找并选中新创建的会话
+        const created = sessionsList.value.find((s) => s.id === newSession.id)
+        if (created) {
+          setCurrentSession(created)
+        }
+
+        return newSession // 返回创建的会话信息
+      } catch (err) {
+        setError(err)
+        ElMessage.error(error.value || '创建会话失败')
+        return null
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    /**
+     * @description 设置当前选中的会话
+     * @param {object | null} session - 要设置为当前会话的对象，或 null 清除选择
+     */
+    const setCurrentSession = (session) => {
+      // 只有当选择的会话与当前会话不同时才更新
+      if (currentSession.value?.id !== session?.id) {
+        currentSession.value = session
+        // 注意：选择会话后，需要触发加载该会话的消息记录
+        // 这部分逻辑应在 chatPage.vue 中处理
+      }
+    }
+
+    /**
+     * @description 更新会话标题
+     * @param {string} sessionId - 要更新的会话 ID
+     * @param {string} newTitle - 新的标题
+     */
+    const updateSessionTitle = async (sessionId, newTitle) => {
+      // 找到需要更新的会话在列表中的索引
+      const index = sessionsList.value.findIndex((s) => s.id === sessionId)
+      if (index === -1) return // 如果没找到，直接返回
+
+      const oldTitle = sessionsList.value[index].title // 保存旧标题以便出错时恢复
+
+      // 乐观更新：先修改本地状态
+      sessionsList.value[index].title = newTitle
+      if (currentSession.value && currentSession.value.id === sessionId) {
+        currentSession.value.title = newTitle
+      }
+
+      setError(null) // 清除之前的错误
+      try {
+        // 调用 API 更新后端
+        await updateSessionTitleAPI(sessionId, { title: newTitle })
+        // 更新成功，无需其他操作
+      } catch (err) {
+        setError(err)
+        ElMessage.error(error.value || '更新会话标题失败')
+        // 更新失败，恢复本地状态
+        sessionsList.value[index].title = oldTitle
+        if (currentSession.value && currentSession.value.id === sessionId) {
+          currentSession.value.title = oldTitle
+        }
+      } finally {
+        // 可选：设置 loading 状态，如果需要的话
+      }
+    }
+
+    /**
+     * @description 删除会话
+     * @param {string} sessionId - 要删除的会话 ID
+     */
+    const deleteSession = async (sessionId) => {
+      // 找到要删除的会话，以便获取其信息或索引
+      const sessionToDelete = sessionsList.value.find((s) => s.id === sessionId)
+      if (!sessionToDelete) return // 如果会话不存在，直接返回
+
+      // 在删除前记录当前选中的是否是即将删除的
+      const isDeletingCurrent =
+        currentSession.value && currentSession.value.id === sessionId
+
+      setLoading(true) // 开始加载状态，表明正在删除
+      setError(null)
+      try {
+        await deleteSessionAPI(sessionId)
+        ElMessage.success(`会话 "${sessionToDelete.title}" 已删除`)
+
+        // 删除成功后，从本地列表中移除
+        sessionsList.value = sessionsList.value.filter((s) => s.id !== sessionId)
+
+        // 如果删除的是当前会话，清除当前会话，并尝试选中列表中的第一个
+        if (isDeletingCurrent) {
+          if (sessionsList.value.length > 0) {
+            // 直接选第一个作为新的当前会话
+            setCurrentSession(sessionsList.value[0])
+          } else {
+            setCurrentSession(null) // 如果列表空了，就设为 null
+          }
+        }
+        // 如果删除的不是当前会话，则当前选中的会话保持不变
+      } catch (err) {
+        setError(err)
+        ElMessage.error(error.value || '删除会话失败')
+      } finally {
+        setLoading(false) // 结束加载状态
+      }
+    }
+
+    return {
+      // State
+      sessionsList,
+      currentSession,
+      loading,
+      error,
+      // Getters
+      getSessionsList,
+      getCurrentSession,
+      isLoading,
+      getError,
+      // Actions
+      fetchSessionList,
+      createSession,
+      setCurrentSession,
+      updateSessionTitle,
+      deleteSession,
+      setLoading, // 可选暴露
+      setError, // 可选暴露
+    }
+  },
+  // 移除 persist 配置
+)
