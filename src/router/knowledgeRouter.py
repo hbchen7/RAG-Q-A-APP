@@ -1,54 +1,82 @@
-from fastapi import APIRouter, Depends
+from typing import Optional
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 import src.service.knowledgeSev as knowledgeSev
-from src.service.userSev import get_current_user  # 导入获取当前用户的函数
+from src.service.userSev import get_current_user
 
 knowledgeRouter = APIRouter()
 
 
-class KnowledgeBase(BaseModel):
-    title: str  # 知识库名称
-    tag: list[str] | None = None  # 知识库标签
-    description: str | None = None  # 知识库描述
-
-
-class KnowledgeUploadFile(BaseModel):
-    file_path: str  # 文件路径
-
-    embedding_supplier: str  # 向量提供商
-    embedding_model: str  # 向量模型
-    inference_api_key: str | None = None  # API密钥
-    is_reorder: bool = False  # reorder=False表示不对检索结果进行排序,因为太占用时间
+class KnowledgeBaseCreate(BaseModel):
+    title: str
+    tag: Optional[list[str]] = None
+    description: Optional[str] = None
 
 
 # 创建知识库
-@knowledgeRouter.post("/create_knowledge", summary="创建知识库")
+@knowledgeRouter.post("/", summary="创建知识库")
 async def create_knowledge(
-    knowledge_base: KnowledgeBase, current_user=Depends(get_current_user)
+    knowledge_base: KnowledgeBaseCreate, current_user=Depends(get_current_user)
 ):
-    await knowledgeSev.create_knowledge(knowledge_base, current_user)
-    return {"message": f"Knowledge base '{knowledge_base.title}' created successfully."}
+    try:
+        new_kb = await knowledgeSev.create_knowledge(knowledge_base, current_user)
+        return new_kb
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建知识库失败: {e}")
 
 
-# 上传文件
-@knowledgeRouter.post("/{kb_id}/upload_file", summary="上传知识库文件")
-async def upload_knowledge(kb_id: str, knowledge_uploadFile: KnowledgeUploadFile):
-    await knowledgeSev.upload_knowledge(kb_id, knowledge_uploadFile)
-    return {
-        "message": f"Knowledge file '{knowledge_uploadFile.file_path}' processing started."
-    }
+# 上传文件到指定知识库
+@knowledgeRouter.post("/{kb_id}/files/", summary="上传文件到知识库")
+async def upload_file_to_knowledge_base(
+    kb_id: str,
+    file: UploadFile = File(...),
+    embedding_supplier: str = Form(...),
+    embedding_model: str = Form(...),
+    embedding_api_key: Optional[str] = Form(None),
+    is_reorder: bool = Form(False),
+):
+    """
+    上传单个文件到指定的知识库 (kb_id)。
+    文件通过 multipart/form-data 上传。
+    Embedding 相关配置通过表单字段传递。
+    """
+    try:
+        result = await knowledgeSev.process_uploaded_file(
+            kb_id=kb_id,
+            file=file,
+            embedding_supplier=embedding_supplier,
+            embedding_model=embedding_model,
+            embedding_api_key=embedding_api_key,
+            is_reorder=is_reorder,
+        )
+        return result
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"上传文件到知识库 {kb_id} 时发生错误: {e}")
+        raise HTTPException(status_code=500, detail=f"处理文件上传失败: {e}")
 
 
 # 获取知识库列表
-@knowledgeRouter.get("/get_knowledge_list", summary="获取知识库列表")
+@knowledgeRouter.get("/", summary="获取知识库列表")
 async def get_knowledge_list():
     knowledge_list = await knowledgeSev.get_knowledge_list()
     return knowledge_list
 
 
 # 删除知识库
-@knowledgeRouter.delete("/delete_knowledge", summary="删除知识库")
-async def delete_knowledge(file_path: str):
-    await knowledgeSev.delete_knowledge(file_path)
-    return {"message": f"Knowledge file '{file_path}' deleted successfully."}
+@knowledgeRouter.delete("/{kb_id}", summary="删除知识库")
+async def delete_knowledge_base(kb_id: str):
+    try:
+        await knowledgeSev.delete_knowledge_base(kb_id)
+        return {
+            "message": f"Knowledge base '{kb_id}' and associated data deleted successfully."
+        }
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除知识库失败: {e}")

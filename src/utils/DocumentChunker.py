@@ -1,8 +1,12 @@
 from langchain_community.document_loaders import (
-    PyPDFLoader, CSVLoader, TextLoader,
+    CSVLoader,
+    PyPDFLoader,
+    TextLoader,
+    UnstructuredMarkdownLoader,
     UnstructuredWordDocumentLoader,
-    UnstructuredMarkdownLoader)
+)
 from langchain_core.document_loaders import BaseLoader
+
 # from langchain.document_loaders import
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from unstructured.file_utils.filetype import FileType, detect_filetype
@@ -17,13 +21,14 @@ if LIBMAGIC_AVAILABLE:
 
 class DocumentChunker(BaseLoader):
     """文档加载与切分"""
+
     allow_file_type = {  # 文件类型与加载类及参数
-        FileType.CSV: (CSVLoader, {'autodetect_encoding': True, "encoding": "utf-8"}),
-        FileType.TXT: (TextLoader, {'autodetect_encoding': True, "encoding": "utf-8"}),
+        FileType.CSV: (CSVLoader, {"autodetect_encoding": True, "encoding": "utf-8"}),
+        FileType.TXT: (TextLoader, {"autodetect_encoding": True, "encoding": "utf-8"}),
         FileType.DOC: (UnstructuredWordDocumentLoader, {"encoding": "utf-8"}),
         FileType.DOCX: (UnstructuredWordDocumentLoader, {"encoding": "utf-8"}),
         FileType.PDF: (PyPDFLoader, {}),
-        FileType.MD: (UnstructuredMarkdownLoader, {"encoding": "utf-8"})
+        FileType.MD: (UnstructuredMarkdownLoader, {"encoding": "utf-8"}),
     }
 
     def __init__(self, file_path: str) -> None:
@@ -44,15 +49,17 @@ class DocumentChunker(BaseLoader):
         # UnstructuredWordDocumentLoader(file_path, {'encoding': 'utf-8'})
         self.loader: BaseLoader = loader_class(file_path, **params)
         # 创建文本分割器
-        self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+        self.text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=500, chunk_overlap=50
+        )
 
     def load(self) -> list:
         """使用文本切割器对文件进行切分"""
         return self.loader.load_and_split(self.text_splitter)
 
 
-if __name__ == '__main__':
-    file_path1 = "./人事管理流程.docx"  # test docx file
-    chunker = DocumentChunker(file_path1)
-    chunks = chunker.load()
-    print(len(chunks))
+# if __name__ == "__main__":
+#     file_path1 = "./人事管理流程.docx"  # test docx file
+#     chunker = DocumentChunker(file_path1)
+#     chunks = chunker.load()
+#     print(len(chunks))

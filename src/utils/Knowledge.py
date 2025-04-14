@@ -1,104 +1,184 @@
 import os
 from hashlib import md5
+from typing import List, Optional
 
-from beanie.exceptions import DocumentNotFound
 from dotenv import load_dotenv
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.document_compressors import CrossEncoderReranker
 from langchain_chroma import Chroma
 from langchain_community.cross_encoders import HuggingFaceCrossEncoder
-
-# from langchain_community.cro
+from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 
-from models.knowledgeBase import KnowledgeBase
 from src.utils.DocumentChunker import DocumentChunker
 
 load_dotenv()
 # 设置知识库 向量模型 重排序模型的路径
-# embedding_model = r'D:\python_project\BAAI\bge-large-zh-v1.5'  # 向量模型
 rerank_model = r"D:\python_project\BAAI\bge-reranker-large"  # 重排序模型
 chroma_dir = "chroma/"  # 向量数据库的路径
 # 向量模型参数,cpu表示使用cpu进行计算，gpu表示使用gpu进行计算
-model_kwargs = {"device": "cuda"}
+# model_kwargs = {"device": "cuda"}
 
 
 class Knowledge:
-    """知识库"""
+    """知识库工具类，处理向量化、存储和检索"""
 
     def __init__(self, _embeddings=None, reorder=False):
         self.reorder = reorder  # 是否重排序 启动重排序模型，时间会增加
         self._embeddings = _embeddings
+        if not self._embeddings:
+            # 如果没有提供 embedding 函数，某些操作会失败，可以考虑抛出异常或警告
+            print("警告: Knowledge 类在没有提供 embedding 函数的情况下初始化。")
 
     @staticmethod
     def is_already_vector_database(collection_name: str) -> bool:
-        """是否已经对文件进行向量存储 (检查文件系统)"""
-        return (
-            True if os.path.exists(os.path.join(chroma_dir, collection_name)) else False
-        )
-
-    async def upload_knowledge(self, file_path: str) -> bool:
-        """异步上传知识库文件，并将映射关系存入数据库"""
-        collection_name = self.get_file_md5(file_path)
-
-        # 检查数据库中是否已存在该文件路径的映射
-        existing_mapping = await KnowledgeBase.find_one(
-            KnowledgeBase.file_path == file_path
-        )
-        if existing_mapping:
-            print(
-                f"文件 {file_path} 的映射已存在数据库中 (集合: {existing_mapping.collection_name})."
-            )
-            # 可选：检查ChromaDB目录是否存在，如果不存在则重新创建索引
-            if not self.is_already_vector_database(existing_mapping.collection_name):
-                print(
-                    f"警告：数据库中存在映射，但ChromaDB目录 {existing_mapping.collection_name} 不存在。将重新创建索引。"
-                )
-                await self.create_indexes(existing_mapping.collection_name, file_path)
-                return True  # 表示进行了创建操作
-            else:
-                print("向量数据库已存在，跳过上传。")
-                return False  # 表示未进行上传
-        else:
-            # 检查Chroma目录是否存在，以防万一（理论上应该和DB同步）
-            if self.is_already_vector_database(collection_name):
-                print(
-                    f"警告：文件 {file_path} 的映射不存在于数据库，但ChromaDB目录 {collection_name} 已存在。将创建数据库映射。"
-                )
-                # 如果Chroma目录存在但DB没有记录，也创建映射记录
-                await self.create_vector_document_mapping(file_path, collection_name)
-                return False  # 仅创建了映射，未重新创建索引
-            else:
-                print(f"文件 {file_path} 的向量数据库和映射均不存在，开始创建...")
-                await self.create_indexes(collection_name, file_path)
-                return True  # 表示进行了创建操作
+        """检查指定集合名称的 ChromaDB 物理存储是否存在"""
+        persist_directory = os.path.join(chroma_dir, collection_name)
+        # 检查目录是否存在并且是一个目录
+        return os.path.isdir(persist_directory)
 
     def load_knowledge(self, collection_name) -> Chroma:
-        """加载向量数据库"""
-        persist_directory = os.path.join("./chroma", collection_name)
+        """加载指定名称的 Chroma 向量数据库"""
+        if not self._embeddings:
+            raise ValueError("无法加载知识库，因为缺少 embedding 函数。")
+        persist_directory = os.path.join(chroma_dir, collection_name)  # 使用 chroma_dir
+        print(f"尝试从 '{persist_directory}' 加载集合 '{collection_name}'")
         return Chroma(
             collection_name=collection_name,
             persist_directory=persist_directory,
             embedding_function=self._embeddings,
         )
 
-    def get_retrievers(self, collection: str) -> BaseRetriever:
-        """根据集合名称 (md5) 获取该文档的检索器"""
-        if self.is_already_vector_database(collection):
-            retriever = self.load_knowledge(collection).as_retriever(
-                search_kwargs={"k": 3}
+    async def add_file_to_knowledge_base(
+        self, kb_id: str, file_path: str, file_name: str, file_md5: str
+    ) -> None:
+        """
+        异步将单个文件处理并添加到指定的知识库集合中（集合名为 kb_id）。
+        :param kb_id: 知识库ID，将作为 Chroma 的 collection_name。
+        :param file_path: 要处理的文件路径。
+        :param file_name: 原始文件名。
+        :param file_md5: 文件的MD5值，用于元数据。
+        """
+        print(f"开始处理文件 {file_path} (MD5: {file_md5}) 并添加到知识库 {kb_id}...")
+        if not self._embeddings:
+            raise ValueError("无法处理文件，因为缺少 embedding 函数。")
+
+        # --- 1. 加载和分块文档 ---
+        try:
+            print(f"使用 DocumentChunker 加载和分块: {file_path}")
+            loader = DocumentChunker(file_path)  # 假设 DocumentChunker 存在且可用
+            documents: List[Document] = loader.load()
+            if not documents:
+                print(f"警告: 文件 {file_path} 未产生任何文档块，跳过处理。")
+                return
+            print(f"文件 {file_path} 加载并分块完成，共 {len(documents)} 块。")
+        except Exception as e:
+            print(f"加载或分块文件 {file_path} 时出错: {e}")
+            raise
+
+        # --- 2. 准备并注入元数据 ---
+        metadata_to_add = {
+            "knowledge_base_id": str(kb_id),  # 确保是字符串
+            "source_file_path": file_path,
+            "source_file_md5": file_md5,
+            "source_file_name": file_name,
+        }
+        print(f"为文档块添加元数据: {metadata_to_add}")
+        processed_documents = []
+        for doc in documents:
+            if doc.metadata is None:
+                doc.metadata = {}
+            # 更新元数据，使用 .copy() 避免意外修改原始 metadata_to_add
+            current_metadata = doc.metadata.copy()
+            current_metadata.update(metadata_to_add)
+            # 创建一个新的 Document 或直接修改，取决于 DocumentChunker 实现
+            # 为安全起见，可以创建新 Document
+            processed_documents.append(
+                Document(page_content=doc.page_content, metadata=current_metadata)
             )
-            if self.reorder:
-                return self.contex_reorder(retriever)
+            # 或者如果可以直接修改: doc.metadata.update(metadata_to_add)
+
+        # --- 3. 添加到 ChromaDB ---
+        kb_id_str = str(kb_id)  # 确保是字符串
+        persist_directory = os.path.join(chroma_dir, kb_id_str)
+
+        try:
+            if not self.is_already_vector_database(kb_id_str):
+                print(f"集合 '{kb_id_str}' 不存在，首次创建并添加文档...")
+                # 首次创建
+                Chroma.from_documents(
+                    documents=processed_documents,  # 使用处理过的文档
+                    embedding=self._embeddings,
+                    collection_name=kb_id_str,
+                    persist_directory=persist_directory,
+                )
+                print(f"集合 '{kb_id_str}' 创建成功。")
             else:
-                return retriever
+                print(f"集合 '{kb_id_str}' 已存在，加载并添加新文档...")
+                # 集合已存在，加载后添加
+                vectorstore = self.load_knowledge(kb_id_str)
+                vectorstore.add_documents(
+                    documents=processed_documents
+                )  # 使用处理过的文档
+                print(f"新文档块已添加到现有集合 '{kb_id_str}'。")
+
+            print(f"文件 {file_path} 的向量数据成功添加/更新到集合 '{kb_id_str}'。")
+
+        except Exception as e:
+            print(f"将文件 {file_path} 的向量数据添加到集合 '{kb_id_str}' 时出错: {e}")
+            raise
+
+    def get_retriever_for_knowledge_base(
+        self, kb_id: str, filter_dict: Optional[dict] = None, search_k: int = 3
+    ) -> BaseRetriever:
+        """
+        根据知识库ID (kb_id) 获取检索器，支持可选的元数据过滤。
+        :param kb_id: 知识库ID，即 Chroma 集合名称。
+        :param filter_dict: 用于元数据过滤的字典，例如 {"source_file_md5": "..."}。
+        :param search_k: 检索时返回的最相似文档数量。
+        :return: 配置好的 Langchain BaseRetriever。
+        """
+        kb_id_str = str(kb_id)
+        print(f"准备为知识库 '{kb_id_str}' 获取检索器...")
+
+        search_kwargs = {"k": search_k}
+        if filter_dict:
+            # 确保 filter_dict 中的值是 Chroma 支持的类型 (str, int, float, bool)
+            # 这里假设调用者会确保这一点
+            search_kwargs["filter"] = filter_dict
+            print(f"应用元数据过滤器: {filter_dict}")
         else:
-            raise FileNotFoundError("该文件不存在，请先上传！")
+            print("不应用元数据过滤器")
+
+        if self.is_already_vector_database(kb_id_str):
+            print(f"加载知识库 '{kb_id_str}'...")
+            try:
+                vectorstore = self.load_knowledge(kb_id_str)
+                print(f"将知识库 '{kb_id_str}' 作为检索器，配置: {search_kwargs}")
+                retriever = vectorstore.as_retriever(search_kwargs=search_kwargs)
+
+                if self.reorder:
+                    print("启用重排序...")
+                    return self.contex_reorder(retriever)
+                else:
+                    return retriever
+            except Exception as e:
+                # 处理加载或创建检索器时可能发生的错误
+                error_msg = f"加载知识库 '{kb_id_str}' 或创建检索器时出错: {e}"
+                print(f"错误: {error_msg}")
+                raise RuntimeError(
+                    error_msg
+                ) from e  # 使用更具体的异常类型或重新抛出原始异常
+        else:
+            error_msg = f"知识库集合 '{kb_id_str}' 的物理存储 (在 {chroma_dir}) 不存在或无法访问！"
+            print(f"错误: {error_msg}")
+            raise FileNotFoundError(error_msg)
 
     @staticmethod
     def contex_reorder(retriever) -> ContextualCompressionRetriever:
         """交叉编码器重新排序器"""
-        # 加载重新排序的模型
+        print("加载重排序模型...")
+        # 确保 rerank_model 路径正确且模型存在
         model = HuggingFaceCrossEncoder(
             model_name=rerank_model, model_kwargs=model_kwargs
         )
@@ -109,106 +189,25 @@ class Knowledge:
         )
         return compression_retriever
 
-    async def create_indexes(self, collection_name: str, file_path: str) -> None:
-        """异步将段落数据向量化后添加到向量数据库，并记录映射关系"""
-        print(f"开始向量化文件 {file_path}...")
-        # DocumentChunker and Chroma operations might be blocking.
-        # Consider running them in a thread pool executor for a truly async operation if needed.
-        # For now, we'll keep them as synchronous calls within the async function.
-        loader = DocumentChunker(file_path)
-        documents = loader.load()  # 加载段落
-        print("文档段落加载完成！")
-        print("开始向量化文档...")
-
-        # 创建存储向量数据库的目录
-        persist_directory = os.path.join("./chroma", collection_name)
-        try:
-            Chroma.from_documents(
-                documents,
-                persist_directory=persist_directory,
-                collection_name=collection_name,
-                embedding=self._embeddings,
-            )
-            print(f"向量化文件 {file_path} 完成！")
-            # 记录向量化的文档到数据库
-            await self.create_vector_document_mapping(file_path, collection_name)
-            print(f"文件 {file_path} 与集合 {collection_name} 的映射关系已存入数据库。")
-
-        except Exception as e:
-            print(f"向量化或存储映射时出错 ({file_path}): {e}")
-            # Consider more specific error handling or cleanup if needed
-            # 例如，如果Chroma创建成功但数据库映射失败，是否需要删除Chroma目录？
-            raise  # Re-raise the exception after logging
-
-    async def create_vector_document_mapping(
-        self, file_path: str, collection_name: str
-    ) -> None:
-        """异步创建文件路径到集合名称的数据库映射记录"""
-        try:
-            mapping = KnowledgeBase(
-                file_path=file_path, collection_name=collection_name
-            )
-            await mapping.insert()
-            print(f"成功将映射 ({file_path} -> {collection_name}) 存入数据库。")
-        except Exception as e:  # Catch potential duplicate key errors etc.
-            print(f"存储映射 ({file_path} -> {collection_name}) 到数据库时出错: {e}")
-            # Check if it's a duplicate error, maybe log differently or ignore
-            existing = await KnowledgeBase.find_one(
-                KnowledgeBase.file_path == file_path
-            )
-            if existing and existing.collection_name == collection_name:
-                print("映射关系已存在且一致，忽略错误。")
-            else:
-                # Re-raise if it's another error or inconsistency
-                raise
-
-    @staticmethod
-    async def get_vector_document_name_mapping() -> dict:
-        """异步从数据库获取所有文件路径到集合名称的映射"""
-        mappings = await KnowledgeBase.find_all().to_list()
-        return {mapping.file_path: mapping.collection_name for mapping in mappings}
-
-    async def get_document_list(self) -> list:
-        """异步获取已向量化并记录在数据库中的文档列表 (文件路径)"""
-        mapping_dict = await self.get_vector_document_name_mapping()
-        return list(mapping_dict.keys())
-
-    @staticmethod
-    async def get_collection_name_by_filepath(file_path: str) -> str | None:
-        """异步根据文件路径从数据库查找对应的集合名称 (MD5)"""
-        try:
-            mapping = await KnowledgeBase.find_one(KnowledgeBase.file_path == file_path)
-            return mapping.collection_name if mapping else None
-        except DocumentNotFound:
-            return None
-
-    @staticmethod
-    async def delete_document_mapping(file_path: str) -> bool:
-        """异步根据文件路径删除数据库中的映射记录"""
-        mapping = await KnowledgeBase.find_one(KnowledgeBase.file_path == file_path)
-        if mapping:
-            await mapping.delete()
-            print(f"已从数据库删除文件 {file_path} 的映射记录。")
-            return True
-        else:
-            print(f"数据库中未找到文件 {file_path} 的映射记录，无需删除。")
-            return False
-
     @staticmethod
     def get_file_md5(file_path: str) -> str:
-        """对文件中的内容计算md5值"""
-        block_size = 65536  # 每次读取的块大小
-        m = md5()  # 创建MD5对象
-        with open(file_path, "rb") as f:
-            while True:
-                data = f.read(block_size)
-                if not data:
-                    break
-                m.update(data)  # 更新MD5值
-        return m.hexdigest()  # 返回计算结果的十六进制字符串格式
-
-
-# if __name__ == '__main__':
-#     knowledge = Knowledge(reorder=False)  # 实例化知识库 reorder=False表示不对检索结果进行排序,因为太占用时间了
-#     llm = OpenAI()  # 实例化LLM模型
-#     knowledge.upload_knowledge("../../static/RAG.pdf")  # 上传知识库文件)
+        """对文件内容计算md5值"""
+        print(f"计算文件 MD5: {file_path}")
+        block_size = 65536
+        m = md5()
+        try:
+            with open(file_path, "rb") as f:
+                while True:
+                    data = f.read(block_size)
+                    if not data:
+                        break
+                    m.update(data)
+            hex_digest = m.hexdigest()
+            print(f"文件 MD5 计算完成 ({file_path}): {hex_digest}")
+            return hex_digest
+        except FileNotFoundError:
+            print(f"错误: 文件未找到 {file_path}")
+            raise FileNotFoundError(f"无法计算 MD5，文件未找到: {file_path}")
+        except Exception as e:
+            print(f"计算文件 {file_path} MD5 时发生未知错误: {e}")
+            raise RuntimeError(f"计算文件 {file_path} MD5 时出错: {e}") from e
