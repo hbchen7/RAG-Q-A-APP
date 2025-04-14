@@ -1,10 +1,9 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+import src.service.knowledgeSev as knowledgeSev
 from utils.embedding import get_embedding
 from utils.Knowledge import Knowledge
-import src.service.knowledgeSev as knowledgeSev
-
 
 knowledgeRouter = APIRouter()
 

@@ -11,7 +11,7 @@ from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 # from langchain_community.cro
 from langchain_core.retrievers import BaseRetriever
 
-from src.models.knowledge import KnowledgeBaseMapping
+from models.knowledgeBase import KnowledgeBase
 from src.utils.DocumentChunker import DocumentChunker
 
 load_dotenv()
@@ -42,8 +42,8 @@ class Knowledge:
         collection_name = self.get_file_md5(file_path)
 
         # 检查数据库中是否已存在该文件路径的映射
-        existing_mapping = await KnowledgeBaseMapping.find_one(
-            KnowledgeBaseMapping.file_path == file_path
+        existing_mapping = await KnowledgeBase.find_one(
+            KnowledgeBase.file_path == file_path
         )
         if existing_mapping:
             print(
@@ -145,7 +145,7 @@ class Knowledge:
     ) -> None:
         """异步创建文件路径到集合名称的数据库映射记录"""
         try:
-            mapping = KnowledgeBaseMapping(
+            mapping = KnowledgeBase(
                 file_path=file_path, collection_name=collection_name
             )
             await mapping.insert()
@@ -153,8 +153,8 @@ class Knowledge:
         except Exception as e:  # Catch potential duplicate key errors etc.
             print(f"存储映射 ({file_path} -> {collection_name}) 到数据库时出错: {e}")
             # Check if it's a duplicate error, maybe log differently or ignore
-            existing = await KnowledgeBaseMapping.find_one(
-                KnowledgeBaseMapping.file_path == file_path
+            existing = await KnowledgeBase.find_one(
+                KnowledgeBase.file_path == file_path
             )
             if existing and existing.collection_name == collection_name:
                 print("映射关系已存在且一致，忽略错误。")
@@ -165,7 +165,7 @@ class Knowledge:
     @staticmethod
     async def get_vector_document_name_mapping() -> dict:
         """异步从数据库获取所有文件路径到集合名称的映射"""
-        mappings = await KnowledgeBaseMapping.find_all().to_list()
+        mappings = await KnowledgeBase.find_all().to_list()
         return {mapping.file_path: mapping.collection_name for mapping in mappings}
 
     async def get_document_list(self) -> list:
@@ -177,9 +177,7 @@ class Knowledge:
     async def get_collection_name_by_filepath(file_path: str) -> str | None:
         """异步根据文件路径从数据库查找对应的集合名称 (MD5)"""
         try:
-            mapping = await KnowledgeBaseMapping.find_one(
-                KnowledgeBaseMapping.file_path == file_path
-            )
+            mapping = await KnowledgeBase.find_one(KnowledgeBase.file_path == file_path)
             return mapping.collection_name if mapping else None
         except DocumentNotFound:
             return None
@@ -187,9 +185,7 @@ class Knowledge:
     @staticmethod
     async def delete_document_mapping(file_path: str) -> bool:
         """异步根据文件路径删除数据库中的映射记录"""
-        mapping = await KnowledgeBaseMapping.find_one(
-            KnowledgeBaseMapping.file_path == file_path
-        )
+        mapping = await KnowledgeBase.find_one(KnowledgeBase.file_path == file_path)
         if mapping:
             await mapping.delete()
             print(f"已从数据库删除文件 {file_path} 的映射记录。")

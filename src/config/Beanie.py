@@ -7,7 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from src.models.assistant import Assistant
 from src.models.chat_history import ChatHistoryMessage
 from src.models.config import UserEnbeddingConfig, UserLLMConfig
-from src.models.knowledge import KnowledgeBaseMapping
+from models.knowledgeBase import KnowledgeBase
 from src.models.session import Session
 from src.models.user import User
 
@@ -33,6 +33,6 @@ async def init_db():
             Session,
             Assistant,
             ChatHistoryMessage,
-            KnowledgeBaseMapping,
+            KnowledgeBase,
         ],  # 添加所有文档模型类
     )
