@@ -1,11 +1,9 @@
 import os
 
-from langchain_community.embeddings import (
-    OpenAIEmbeddings,  # OpenAI Embedding模型
-)  # HuggingFace远程API
 from langchain_ollama import OllamaEmbeddings  # ollama本地模型
+from langchain_openai import OpenAIEmbeddings
 
-ONEAPI_BASE_URL = os.getenv("ONEAPI_BASE_URL", "https://api.oneapi.com/v2")
+ONEAPI_BASE_URL = os.getenv("ONEAPI_BASE_URL")
 
 
 def get_embedding(supplier: str, model_name: str, inference_api_key: str = None):

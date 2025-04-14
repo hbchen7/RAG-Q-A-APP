@@ -15,17 +15,15 @@ class LLMConfig(BaseModel):
         "oneapi"  # 这里可以根据实际需求添加或修改固定字符串值  # 这里可以根据实际需求添加或修改固定字符串值
     )
     model: str = "Qwen/Qwen2.5-7B-Instruct"
-    api_key: Optional[str] = "sk-HduAb5sRchv3FUJN7a459bE7FaEe4bEc9d119d0168971c85"
+    api_key: str
     # max_length: Optional[int] = 10086
 
 
 class KnowledgeConfig(BaseModel):
     embedding_supplier: str = "oneapi"
     embedding_model: str = "BAAI/bge-m3"
-    embedding_api_key: Optional[str] = (
-        "sk-HduAb5sRchv3FUJN7a459bE7FaEe4bEc9d119d0168971c85"
-    )
-    collection: str = "745973241985addce3921005427604e3"
+    embedding_api_key: str
+    collection: str
     is_reorder: bool = False  # reorder=False表示不对检索结果进行排序,因为太占用时间
 
 

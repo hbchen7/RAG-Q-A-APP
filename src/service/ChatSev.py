@@ -40,7 +40,6 @@ class ChatSev:
         chat_history_max_length: Optional[int] = 8,
     ):
         self.knowledge: Optional[Knowledge] = knowledge
-        # chat_history_max_length 对于数据库存储可能不再直接相关，但保留以备将来使用
         self.chat_history_max_length: int = (
             chat_history_max_length if chat_history_max_length is not None else 8
         )
@@ -64,8 +63,8 @@ class ChatSev:
 
         # 知识库prompt--system
         knowledge_system_prompt = (
-            f"{ai_info} 当用户向你提问，请你使用下面检索到的上下文来回答问题。如果检索到的上下文中没有问题的答案，请你直接回答不知道。检索到的上下文如下：\n\n"
-            "{context}"
+            f"{ai_info} 【注意：当用户向你提问，请你使用下面检索到的上下文来回答问题。如果检索到的上下文中没有问题的答案，请你直接回答不知道。检索到的上下文如下：\n\n"
+            "{context}】"
         )
 
         self.knowledge_prompt = ChatPromptTemplate.from_messages(  # 知识库prompt
