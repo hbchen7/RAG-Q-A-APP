@@ -1,34 +1,42 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 import src.service.knowledgeSev as knowledgeSev
-from utils.embedding import get_embedding
-from utils.Knowledge import Knowledge
+from src.service.userSev import get_current_user  # 导入获取当前用户的函数
 
 knowledgeRouter = APIRouter()
 
 
-class embedding_config(BaseModel):
-    embedding_supplier: str
-    embedding_model: str
-    inference_api_key: str = None
-    file_path: str
+class KnowledgeBase(BaseModel):
+    title: str  # 知识库名称
+    tag: list[str] | None = None  # 知识库标签
+    description: str | None = None  # 知识库描述
+
+
+class KnowledgeUploadFile(BaseModel):
+    file_path: str  # 文件路径
+
+    embedding_supplier: str  # 向量提供商
+    embedding_model: str  # 向量模型
+    inference_api_key: str | None = None  # API密钥
     is_reorder: bool = False  # reorder=False表示不对检索结果进行排序,因为太占用时间
 
 
+# 创建知识库
+@knowledgeRouter.post("/create_knowledge", summary="创建知识库")
+async def create_knowledge(
+    knowledge_base: KnowledgeBase, current_user=Depends(get_current_user)
+):
+    await knowledgeSev.create_knowledge(knowledge_base, current_user)
+    return {"message": f"Knowledge base '{knowledge_base.title}' created successfully."}
+
+
 # 上传文件
-@knowledgeRouter.post("/upload_knowledge", summary="上传知识库文件")
-async def upload_knowledge(embedding_config: embedding_config):
-    # 创建_embedding实例
-    _embedding = get_embedding(
-        embedding_config.embedding_supplier,
-        embedding_config.embedding_model,
-        embedding_config.inference_api_key,
-    )
-    knowledge = Knowledge(_embeddings=_embedding, reorder=embedding_config.is_reorder)
-    await knowledge.upload_knowledge(embedding_config.file_path)
+@knowledgeRouter.post("/{kb_id}/upload_file", summary="上传知识库文件")
+async def upload_knowledge(kb_id: str, knowledge_uploadFile: KnowledgeUploadFile):
+    await knowledgeSev.upload_knowledge(kb_id, knowledge_uploadFile)
     return {
-        "message": f"Knowledge file '{embedding_config.file_path}' processing started."
+        "message": f"Knowledge file '{knowledge_uploadFile.file_path}' processing started."
     }
 
 
