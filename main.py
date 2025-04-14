@@ -1,9 +1,13 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from starlette.responses import RedirectResponse
 
 from src.config.Beanie import init_db
+
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_PROJECT"] = "test-2025.04.14"  # 自定义用例名称
 
 
 @asynccontextmanager
