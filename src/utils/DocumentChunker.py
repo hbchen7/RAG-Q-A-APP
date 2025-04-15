@@ -31,7 +31,9 @@ class DocumentChunker(BaseLoader):
         FileType.MD: (UnstructuredMarkdownLoader, {"encoding": "utf-8"}),
     }
 
-    def __init__(self, file_path: str) -> None:
+    def __init__(
+        self, file_path: str, chunk_size: int = 300, chunk_overlap: int = 30
+    ) -> None:
         """加载文档对象和分割器"""
         # 上传的文件路径
         self.file_path = file_path
@@ -50,7 +52,7 @@ class DocumentChunker(BaseLoader):
         self.loader: BaseLoader = loader_class(file_path, **params)
         # 创建文本分割器
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500, chunk_overlap=50
+            chunk_size=chunk_size, chunk_overlap=chunk_overlap
         )
 
     def load(self) -> list:

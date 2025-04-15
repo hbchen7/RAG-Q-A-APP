@@ -106,7 +106,7 @@ class Knowledge:
             if not self.is_already_vector_database(kb_id_str):
                 print(f"集合 '{kb_id_str}' 不存在，首次创建并添加文档...")
                 # 首次创建
-                Chroma.from_documents(
+                await Chroma.afrom_documents(
                     documents=processed_documents,  # 使用处理过的文档
                     embedding=self._embeddings,
                     collection_name=kb_id_str,
@@ -117,7 +117,7 @@ class Knowledge:
                 print(f"集合 '{kb_id_str}' 已存在，加载并添加新文档...")
                 # 集合已存在，加载后添加
                 vectorstore = self.load_knowledge(kb_id_str)
-                vectorstore.add_documents(
+                await vectorstore.aadd_documents(
                     documents=processed_documents
                 )  # 使用处理过的文档
                 print(f"新文档块已添加到现有集合 '{kb_id_str}'。")
@@ -179,6 +179,13 @@ class Knowledge:
         """交叉编码器重新排序器"""
         print("加载重排序模型...")
         # 确保 rerank_model 路径正确且模型存在
+        # 定义 model_kwargs，例如默认使用 CPU
+        model_kwargs = {"device": "cpu"}
+        # 或者可以添加逻辑检查 CUDA 是否可用
+        # import torch
+        # if torch.cuda.is_available():
+        #     model_kwargs = {"device": "cuda"}
+
         model = HuggingFaceCrossEncoder(
             model_name=rerank_model, model_kwargs=model_kwargs
         )

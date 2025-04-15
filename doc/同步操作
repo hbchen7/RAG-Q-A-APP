@@ -1,1 +1,13 @@
-文件加载、分块、向量化（Chroma.from_documents, vectorstore.add_documents
+文档加载与分块 (DocumentChunker):
+DocumentChunker.load 方法目前是同步的，它内部调用了各个 Langchain Loader 的 load_and_split。虽然一些 Loader 可能有 aload_and_split 或 aload + asplit_documents 的异步版本，但这可能需要对 DocumentChunker 进行更复杂的重构，并且要确保所有依赖的库（如 unstructured）都支持异步操作。
+当前决定: 暂时保持 DocumentChunker.load 的同步性，优先完成明确要求的 ChromaDB 操作异步化。如果后续性能瓶颈依然存在于文档加载/分块阶段，我们可以再进一步探讨将其异步化的方案。
+对于生产环境或性能敏感的应用，考虑使用 asyncio.to_thread 或 run_in_executor 将这些同步操作放到线程池中执行。
+将同步的、可能阻塞的操作（如 DocumentChunker.load 中涉及的文件读取和解析）放到线程池中执行，可以避免它们阻塞 FastAPI/Uvicorn 运行的异步事件循环，从而提高应用的整体响应能力。
+方案:
+我们可以使用 asyncio.to_thread (适用于 Python 3.9+) 来实现这个目的。它会将指定的同步函数（在这里是 loader.load()）提交给事件循环的默认线程池执行器执行，并 await 其完成。
+实施步骤:
+在 src/utils/Knowledge.py 文件顶部导入 asyncio。
+在 add_file_to_knowledge_base 方法中，将 documents: List[Document] = loader.load() 修改为 documents: List[Document] = await asyncio.to_thread(loader.load)。
+具体改动包括：
+在文件顶部添加了 import asyncio。
+将 documents = loader.load() 修改为了 documents = await asyncio.to_thread(loader.load)。

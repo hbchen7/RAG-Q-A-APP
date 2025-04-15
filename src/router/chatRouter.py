@@ -42,9 +42,7 @@ class ChatRequest(BaseModel):
     knowledge_config: Optional[KnowledgeConfig] = None
 
 
-@ChatRouter.post(
-    "/", summary="AI Chat", description="与 AI 进行对话，可选地使用知识库。"
-)
+@ChatRouter.post("/", summary="AI Chat", description="与 AI 进行对话，可选使用知识库。")
 def chat_endpoint(request: ChatRequest):
     """
     处理聊天请求。

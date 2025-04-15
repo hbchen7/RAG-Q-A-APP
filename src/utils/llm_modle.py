@@ -32,7 +32,6 @@ def get_llms(
         return ChatOllama(model=model)
     elif supplier == "oneapi":
         return ChatOpenAI(
-            # api_key="sk-TYPLGOAjVwsV1mEO0eE3A22b046a444bA3CdEc51AdAf7dE0",
             api_key=api_key,
             base_url=ONEAPI_BASE_URL,
             model=model,

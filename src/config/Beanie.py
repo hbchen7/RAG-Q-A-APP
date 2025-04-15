@@ -3,11 +3,12 @@ import os
 from beanie import init_beanie
 from motor.motor_asyncio import AsyncIOMotorClient
 
+from models.knowledgeBase import KnowledgeBase
+
 #   导入所有文档模型类
 from src.models.assistant import Assistant
 from src.models.chat_history import ChatHistoryMessage
 from src.models.config import UserEnbeddingConfig, UserLLMConfig
-from models.knowledgeBase import KnowledgeBase
 from src.models.session import Session
 from src.models.user import User
 

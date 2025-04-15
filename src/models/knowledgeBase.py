@@ -15,7 +15,8 @@ class KnowledgeBase(Document):
     description: str | None = None  # 知识库描述
     creator: str  # 创建者:username
     filesList: list[dict] | None = None  # 知识库包含的文件的{MD5值、文件路径、文件名}
-
+    embedding_model: str  # 嵌入模型
+    embedding_supplier: str = "oneapi"  # 嵌入供应商
     create_at: datetime = Field(default_factory=datetime.now)
 
     class Settings:
