@@ -1,22 +1,33 @@
 from datetime import datetime
+from typing import List, Optional
 
 from beanie import Document
-from pydantic import Field
+from pydantic import BaseModel, Field
+
+
+class EmbeddingConfig(BaseModel):
+    """嵌入模型的配置"""
+
+    embedding_model: str  # 嵌入模型名称 (在配置内部，这个可以是必须的)
+    embedding_supplier: str = "oneapi"  # 嵌入供应商，可以有默认值
+    embedding_apikey: Optional[str] = None  # 嵌入API Key，如果需要
 
 
 class KnowledgeBase(Document):
     """
-    Represents the mapping between a source file path and its corresponding
-    vector database collection name (MD5 hash).
+    知识库模型，包含嵌入配置。
     """
 
     title: str  # 知识库名称
-    tag: list[str] | None = None  # 知识库标签
-    description: str | None = None  # 知识库描述
+    tag: Optional[List[str]] = None  # 知识库标签 (使用 Optional 和 List)
+    description: Optional[str] = None  # 知识库描述
     creator: str  # 创建者:username
-    filesList: list[dict] | None = None  # 知识库包含的文件的{MD5值、文件路径、文件名}
-    embedding_model: str  # 嵌入模型
-    embedding_supplier: str = "oneapi"  # 嵌入供应商
+    filesList: Optional[List[dict]] = (
+        None  # 知识库包含的文件列表 (使用 Optional 和 List)
+    )
+
+    embedding_config: EmbeddingConfig
+
     create_at: datetime = Field(default_factory=datetime.now)
 
     class Settings:

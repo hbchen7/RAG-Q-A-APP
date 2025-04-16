@@ -1,7 +1,7 @@
 import os
 import shutil  # 用于文件操作和删除目录
 import tempfile  # 用于创建临时文件
-from typing import Optional
+from datetime import datetime  # 导入 datetime 模块
 
 from bson import ObjectId  # 用于验证 kb_id
 from fastapi import HTTPException, UploadFile  # 添加 HTTPException
@@ -20,13 +20,16 @@ chroma_dir = "chroma/"  # 确保这里有定义
 
 async def create_knowledge(knowledge_base_data, current_user) -> KnowledgeBaseModel:
     """创建新的知识库记录"""
+    # 确保 embedding_config 数据被正确传递和使用
+    embedding_config_data = knowledge_base_data.embedding_config
     new_knowledge_base = KnowledgeBaseModel(
         title=knowledge_base_data.title,
         tag=knowledge_base_data.tag,
         description=knowledge_base_data.description,
         creator=current_user.username,
-        embedding_model=knowledge_base_data.embedding_model,
-        embedding_supplier=knowledge_base_data.embedding_supplier,
+        # 直接将 Pydantic 模型转换为字典或 Beanie 能处理的对象
+        # Beanie 通常可以直接处理 Pydantic 模型
+        embedding_config=embedding_config_data,  # 传递 EmbeddingConfig 实例
         filesList=[],  # 初始化为空列表
     )
     await new_knowledge_base.insert()
@@ -36,9 +39,6 @@ async def create_knowledge(knowledge_base_data, current_user) -> KnowledgeBaseMo
 async def process_uploaded_file(
     kb_id: str,
     file: UploadFile,
-    embedding_supplier: str,
-    embedding_model: str,
-    embedding_api_key: Optional[str],
     is_reorder: bool,
 ) -> dict:
     """处理上传的文件，进行向量化并更新知识库记录"""
@@ -49,6 +49,15 @@ async def process_uploaded_file(
     knowledge_base_doc = await KnowledgeBaseModel.get(ObjectId(kb_id))
     if not knowledge_base_doc:
         raise FileNotFoundError(f"知识库 ID 未找到: {kb_id}")
+
+    # 1.1 检查知识库是否有 embedding_config
+    if not knowledge_base_doc.embedding_config:
+        raise ValueError(f"知识库 {kb_id} 缺少嵌入配置 (embedding_config)。")
+    if (
+        not knowledge_base_doc.embedding_config.embedding_model
+        or not knowledge_base_doc.embedding_config.embedding_supplier
+    ):
+        raise ValueError(f"知识库 {kb_id} 的嵌入配置不完整。")
 
     # 2. 将上传的文件保存到临时位置
     # 使用 tempfile 确保安全和自动清理
@@ -80,10 +89,15 @@ async def process_uploaded_file(
                     # 或者 return {"message": "File already exists.", "file_md5": file_md5}
 
         # 5. 准备 Knowledge 工具类实例
+        # 从 knowledge_base_doc 获取 embedding 配置
+        config = knowledge_base_doc.embedding_config
+        print(
+            f"使用知识库 {kb_id} 的嵌入配置: supplier='{config.embedding_supplier}', model='{config.embedding_model}'"
+        )
         _embedding = get_embedding(
-            embedding_supplier,
-            embedding_model,
-            embedding_api_key,
+            config.embedding_supplier,
+            config.embedding_model,
+            config.embedding_apikey,  # 使用配置中的 API Key
         )
         knowledge_util = Knowledge(_embeddings=_embedding, reorder=is_reorder)
 
@@ -101,6 +115,7 @@ async def process_uploaded_file(
             "file_path": tmp_file_path,  # 注意：这里存的是临时路径，也许存原始文件名更好？或者需要一个永久存储路径？
             # 考虑到临时文件会被删除，这里存原始文件名 file.filename 更合理
             "file_name": file.filename,
+            "upload_time": datetime.now(),  # 添加上传时间 (UTC)
             # 可以添加上传时间等其他信息
         }
         # 使用 $push 或 $addToSet 更新 filesList
@@ -253,10 +268,13 @@ async def delete_file_from_knowledge_base(kb_id: str, file_md5: str) -> dict:
     try:
         # 需要一个 embedding 实例来加载 Chroma Store
         # 从知识库文档中获取嵌入配置
-        if (
-            not knowledge_base_doc.embedding_supplier
-            or not knowledge_base_doc.embedding_model
-        ):
+        if not knowledge_base_doc.embedding_config:
+            raise HTTPException(
+                status_code=500,
+                detail=f"知识库 {kb_id} 缺少嵌入配置 (embedding_config)。",
+            )
+        config = knowledge_base_doc.embedding_config
+        if not config.embedding_model or not config.embedding_supplier:
             # 如果知识库记录中缺少嵌入信息，抛出错误
             raise HTTPException(
                 status_code=500,
@@ -264,12 +282,12 @@ async def delete_file_from_knowledge_base(kb_id: str, file_md5: str) -> dict:
             )
 
         print(
-            f"使用知识库 {kb_id} 的嵌入配置: supplier='{knowledge_base_doc.embedding_supplier}', model='{knowledge_base_doc.embedding_model}'"
+            f"使用知识库 {kb_id} 的嵌入配置: supplier='{config.embedding_supplier}', model='{config.embedding_model}'"
         )
         _embedding = get_embedding(
-            knowledge_base_doc.embedding_supplier,
-            knowledge_base_doc.embedding_model,
-            None,  # API Key - 假设删除操作不需要，或已在环境配置
+            config.embedding_supplier,
+            config.embedding_model,
+            config.embedding_apikey,  # 使用配置中的 API Key (如果需要的话)
         )
         knowledge_util = Knowledge(_embeddings=_embedding)  # reorder 不重要
 

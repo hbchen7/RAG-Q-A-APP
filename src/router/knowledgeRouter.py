@@ -4,17 +4,20 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 import src.service.knowledgeSev as knowledgeSev
+
+# 导入 EmbeddingConfig 以便在 KnowledgeBaseCreate 中使用
+from models.knowledgeBase import EmbeddingConfig
 from src.service.userSev import get_current_user
 
 knowledgeRouter = APIRouter()
 
 
+# 更新 KnowledgeBaseCreate 模型以包含 EmbeddingConfig
 class KnowledgeBaseCreate(BaseModel):
     title: str
     tag: Optional[list[str]] = None
     description: Optional[str] = None
-    embedding_model: str
-    embedding_supplier: str = "oneapi"
+    embedding_config: EmbeddingConfig  # 直接使用 EmbeddingConfig 模型
 
 
 # 创建知识库
@@ -23,6 +26,7 @@ async def create_knowledge(
     knowledge_base: KnowledgeBaseCreate, current_user=Depends(get_current_user)
 ):
     try:
+        # 服务层将接收包含 embedding_config 的 knowledge_base 对象
         new_kb = await knowledgeSev.create_knowledge(
             knowledge_base_data=knowledge_base, current_user=current_user
         )
@@ -31,28 +35,30 @@ async def create_knowledge(
         raise HTTPException(status_code=500, detail=f"创建知识库失败: {e}")
 
 
-# 上传文件到指定知识库
+# 修改上传文件接口，移除 embedding 相关的 Form 参数
 @knowledgeRouter.post("/{kb_id}/files/", summary="上传文件到知识库")
 async def upload_file_to_knowledge_base(
     kb_id: str,
     file: UploadFile = File(...),
-    embedding_supplier: str = Form(...),
-    embedding_model: str = Form(...),
-    embedding_api_key: Optional[str] = Form(None),
-    is_reorder: bool = Form(False),
+    # 移除 embedding_supplier, embedding_model, embedding_api_key
+    # embedding_supplier: str = Form(...),
+    # embedding_model: str = Form(...),
+    # embedding_api_key: Optional[str] = Form(None),
+    is_reorder: bool = Form(False),  # is_reorder 仍然需要
 ):
     """
     上传单个文件到指定的知识库 (kb_id)。
     文件通过 multipart/form-data 上传。
-    Embedding 相关配置通过表单字段传递。
+    Embedding 相关配置将从知识库记录中获取。
     """
     try:
+        # 调用服务层函数时不再传递 embedding 配置
         result = await knowledgeSev.process_uploaded_file(
             kb_id=kb_id,
             file=file,
-            embedding_supplier=embedding_supplier,
-            embedding_model=embedding_model,
-            embedding_api_key=embedding_api_key,
+            # embedding_supplier=embedding_supplier, # 移除
+            # embedding_model=embedding_model, # 移除
+            # embedding_api_key=embedding_api_key, # 移除
             is_reorder=is_reorder,
         )
         return result

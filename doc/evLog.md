@@ -33,3 +33,26 @@
   - 协调多个服务和工具类之间的数据流和依赖关系。
   - 确保操作的原子性（先更新 Chroma，再更新 MongoDB）。
   - 异步函数中调用同步库（如 ChromaDB 操作）的潜在性能影响（暂未优化）。
+
+## 2024-XX-XX: 调整知识库模型与接口
+
+- **功能**: 调整了 `KnowledgeBase` 模型，引入 `EmbeddingConfig` 来统一管理嵌入配置。
+- **实现过程**:
+  1. 修改 `src/models/knowledgeBase.py` 中的 `KnowledgeBase` 模型，添加 `embedding_config: EmbeddingConfig` 字段。
+  2. 修改 `src/router/knowledgeRouter.py`:
+     - 更新 `KnowledgeBaseCreate` Pydantic 模型以接受 `embedding_config` 对象。
+     - 移除 `upload_file_to_knowledge_base` 接口中的 `embedding_supplier`, `embedding_model`, `embedding_api_key` 表单参数。
+  3. 修改 `src/service/knowledgeSev.py`:
+     - 更新 `create_knowledge` 服务以保存 `embedding_config`。
+     - 更新 `process_uploaded_file` 服务，使其从数据库读取 `embedding_config`，而不是从接口参数获取。
+     - 更新 `delete_file_from_knowledge_base` 服务，使其从数据库读取 `embedding_config` 来加载 ChromaDB。
+- **重难点**:
+  - 确保 Pydantic 模型和服务层函数正确处理嵌套的 `EmbeddingConfig` 对象。
+  - 调整依赖这些配置的服务函数 (`process_uploaded_file`, `delete_file_from_knowledge_base`) 的数据获取逻辑，并添加必要的错误检查（如配置是否存在、是否完整）。
+  - 需要前端配合修改接口调用方式。
+
+## 2024-07-26: 文件元数据增加上传时间字段
+
+- **功能**: 在文件上传至知识库时，记录文件的上传时间。
+- **实现**: 修改 `src/service/knowledgeSev.py` 中的 `process_uploaded_file` 函数，在创建 `file_metadata_dict` 时，导入 `datetime` 模块并添加 `upload_time` 字段，值为 `datetime.utcnow()`。
+- **目的**: 方便追踪文件上传历史。
