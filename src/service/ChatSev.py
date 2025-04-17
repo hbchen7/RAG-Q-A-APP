@@ -1,7 +1,8 @@
 import logging
 import os  # 添加 os 模块导入
-from typing import Iterable, Optional
+from typing import AsyncIterable, Optional
 
+from bson import ObjectId  # 导入 ObjectId
 from dotenv import load_dotenv
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.retrieval import create_retrieval_chain
@@ -22,6 +23,8 @@ from langchain_mongodb.chat_message_histories import (
     MongoDBChatMessageHistory,  # 导入 MongoDB 历史记录
 )
 
+# 导入 KnowledgeBaseModel
+from src.models.knowledgeBase import KnowledgeBase as KnowledgeBaseModel
 from src.utils.Knowledge import Knowledge
 
 # utils
@@ -86,9 +89,11 @@ class ChatSev:
         )
 
     @staticmethod
-    def streaming_parse(chunks: Iterable[AIMessageChunk]) -> list[AddableDict]:
+    async def streaming_parse(
+        chunks: AsyncIterable[AIMessageChunk],
+    ) -> list[AddableDict]:
         """统一模型的输出格式，将模型的输出存储到字典answer的value中"""
-        for chunk in chunks:
+        async for chunk in chunks:
             yield AddableDict({"answer": chunk.content})
 
     def get_session_chat_history(self, session_id: str) -> BaseChatMessageHistory:
@@ -101,7 +106,7 @@ class ChatSev:
             collection_name=self.mongo_collection_name,
         )
 
-    def invoke(
+    async def invoke(
         self,
         question: str,
         api_key: Optional[str],
@@ -115,7 +120,7 @@ class ChatSev:
         temperature=0.8,
     ) -> Output:
         """
-        执行聊天调用，可选地使用带过滤器的知识库检索。
+        异步执行聊天调用，可选地使用带过滤器的知识库检索，并返回上下文显示名称。
         :param question: 用户问题。
         :param api_key: LLM API Key。
         :param supplier: LLM 提供商。
@@ -126,7 +131,9 @@ class ChatSev:
         :param search_k: 检索时返回的文档数量。
         :param max_length: LLM 最大输出长度。
         :param temperature: LLM 温度。
+        :return: 包含 'answer' 和 'context_display_name' 的字典。
         """
+        context_display_name = "标准对话"  # 初始化上下文显示名称
 
         # 1. 获取 LLM 实例
         chat = get_llms(
@@ -137,12 +144,50 @@ class ChatSev:
             temperature=temperature,
         )
 
-        # 2. 根据是否使用知识库，决定 RAG 链或普通链
+        # 2. 根据是否使用知识库，决定 RAG 链或普通链，并确定上下文名称
         base_chain: RunnableSerializable  # 定义基础链类型
         if knowledge_base_id and self.knowledge:
             logging.info(
                 f"使用知识库: {knowledge_base_id}, 文件过滤器 MD5: {filter_by_file_md5}"
             )
+            # 尝试获取知识库信息以确定显示名称
+            try:
+                if not ObjectId.is_valid(knowledge_base_id):
+                    logging.warning(
+                        f"提供的 knowledge_base_id 无效: {knowledge_base_id}"
+                    )
+                    # 可以选择抛出错误或继续使用默认名称
+                else:
+                    knowledge_base_doc = await KnowledgeBaseModel.get(
+                        ObjectId(knowledge_base_id)
+                    )
+                    if knowledge_base_doc:
+                        if filter_by_file_md5:
+                            file_found = False
+                            if knowledge_base_doc.filesList:
+                                for file_info in knowledge_base_doc.filesList:
+                                    if file_info.get("file_md5") == filter_by_file_md5:
+                                        context_display_name = f"文件：{file_info.get('file_name', '未知文件名')}"
+                                        file_found = True
+                                        break
+                            if not file_found:
+                                logging.warning(
+                                    f"在知识库 {knowledge_base_id} 中未找到 MD5 为 {filter_by_file_md5} 的文件，将显示知识库名称。"
+                                )
+                                context_display_name = (
+                                    f"知识库：{knowledge_base_doc.title}"
+                                )
+                        else:
+                            context_display_name = f"知识库：{knowledge_base_doc.title}"
+                    else:
+                        logging.warning(
+                            f"未找到 ID 为 {knowledge_base_id} 的知识库文档。"
+                        )
+
+            except Exception as e:
+                logging.error(f"查询知识库文档 {knowledge_base_id} 时出错: {e}")
+                # 出错时保持默认名称 "标准对话"
+
             # 构建过滤器字典
             filter_dict = None
             if filter_by_file_md5:
@@ -201,9 +246,23 @@ class ChatSev:
         # 4. 调用带历史记录的链
         config = {"configurable": {"session_id": session_id}}
         logging.info(
-            f"使用 session_id: {session_id} 调用最终链 ({'RAG' if knowledge_base_id and self.knowledge else 'Normal'})..."
+            f"使用 session_id: {session_id} 调用最终链 ({'RAG' if knowledge_base_id and self.knowledge else 'Normal'})... 上下文: {context_display_name}"
         )
-        return chain_with_history.invoke({"input": question}, config=config)
+        # 使用 ainvoke 进行异步调用
+        result = await chain_with_history.ainvoke({"input": question}, config=config)
+
+        # 确保 result 是字典并添加 context_display_name
+        if isinstance(result, dict):
+            result["context_display_name"] = context_display_name
+        elif hasattr(result, "__dict__"):  # 处理对象类型
+            result.__dict__["context_display_name"] = context_display_name
+        else:
+            # 如果不是字典或常见对象，可能需要不同的处理方式
+            # 暂时创建一个新字典包装它
+            logging.warning(f"链返回了非预期的类型 {type(result)}，将尝试包装。")
+            result = {"answer": result, "context_display_name": context_display_name}
+
+        return result  # 返回包含上下文名称的结果
 
     def clear_history(self, session_id: str) -> None:
         """清除指定 session_id 的历史信息"""

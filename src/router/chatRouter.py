@@ -43,7 +43,7 @@ class ChatRequest(BaseModel):
 
 
 @ChatRouter.post("/", summary="AI Chat", description="与 AI 进行对话，可选使用知识库。")
-def chat_endpoint(request: ChatRequest):
+async def chat_endpoint(request: ChatRequest):
     """
     处理聊天请求。
     :param request: 包含问题、会话 ID、LLM/Chat/Knowledge 配置的请求体。
@@ -81,7 +81,7 @@ def chat_endpoint(request: ChatRequest):
     )
 
     try:
-        response = chat_sev.invoke(
+        response = await chat_sev.invoke(
             question=request.question,
             session_id=request.session_id,
             api_key=request.llm_config.api_key,
