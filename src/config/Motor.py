@@ -1,24 +1,17 @@
-# database.py
 from motor.motor_asyncio import AsyncIOMotorClient
+from dotenv import load_dotenv
+import os
 
-MONGO_DETAILS = "mongodb://localhost:27017"
-client = AsyncIOMotorClient(MONGO_DETAILS)
-database = client["fastapi"]
+load_dotenv()
 
-def get_collection(collection_name: str):
-    return database[collection_name]
+class MongoDB:
+    def __init__(self):
+        self.MONGO_DETAILS = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+        self.client = AsyncIOMotorClient(self.MONGO_DETAILS)
+        self.database = self.client[os.getenv("MONGO_DB", "fastapi")]
+    
+    def get_collection(self, collection_name: str):
+        return self.database[collection_name]
 
- 
-collection_users =get_collection("users")
-async def insert_user():
-    document_user = {'name': 'bluebonnet27', 'age': 24}
-    result_insert_user = await collection_users.insert_one(document_user)
-    print('insert_user result: ')
-    print(result_insert_user.inserted_id)
-
-import asyncio
-
-if __name__ == "__main__":
-    print("TEST: DAO")
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(insert_user())
+# 创建全局实例
+mongodb = MongoDB()
