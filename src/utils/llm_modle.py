@@ -18,14 +18,17 @@ def get_llms(
     max_length: int = 10,
     temperature: float = 0.8,
 ):
+    """
+    获取LLM模型
+    """
     if supplier == "openai":
         return ChatOpenAI(model=model, temperature=temperature)
     elif supplier == "siliconflow":
         return BaseChatOpenAI(
-            model=os.getenv("MODEL"),  # 使用DeepSeek聊天模型
-            openai_api_key=os.getenv("OPENAI_API_KEY"),
-            openai_api_base=os.getenv("OPENAI_API_BASE"),
-            max_tokens=int(os.getenv("MAX_TOKENS")),
+            model=os.getenv("SILICONFLOW_MODEL"),  # 使用DeepSeek聊天模型
+            openai_api_key=os.getenv("SILICONFLOW_API_KEY"),
+            openai_api_base=os.getenv("SILICONFLOW_URL"),
+            # max_tokens=int(os.getenv("MAX_TOKENS")),
         )
 
     elif supplier == "ollama":

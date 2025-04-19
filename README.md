@@ -12,8 +12,6 @@
 - Beanie: v1.29.0+ // MongoDB 异步 ORM
 - ChromaDB: (通过 `langchain-chroma`) // 向量数据库，用于存储文档嵌入
 - MongoDB: // 主数据库，用于存储知识库元数据、聊天记录等
-- python-dotenv: // 管理环境变量
-- python-multipart: // 处理文件上传
 
 ## 主要功能
 
@@ -32,7 +30,19 @@
   - 使用 `langchain-mongodb` 的 `MongoDBChatMessageHistory` 将聊天记录持久化存储在 MongoDB 的 `chatHistoy` 集合中，按 `session_id` 区分不同会话。
 - **RESTful API**: 基于 FastAPI 提供接口。
 
-## 项目结构 (示例)
+## 运行项目
+
+1. 需要部署 [One API](https://github.com/songquanpeng/one-api) 作为大模型网关
+2. 在.env 文件中配置数据库连接信息、 MONGO_URI 等环境变量。
+3. 在项目根目录下运行:
+
+```bash
+uvicorn src.main:app --reload --host 0.0.0.0 --port 8081
+```
+
+4. 浏览器访问 API 文档： `http://localhost:8081/docs`。
+
+## 项目结构
 
 ```
 .env                # 环境变量配置 (例如 MONGO_URI, ONEAPI_BASE_URL)
@@ -98,17 +108,6 @@ tests/                  # 测试代码目录
     # 其他 API Keys 等...
     ```
 4.  **启动外部服务**: 确保 MongoDB 服务正在运行。
-
-## 运行项目
-
-在项目根目录下运行:
-
-```bash
-uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-应用将在 `http://localhost:8000` (或配置的主机和端口) 上可用。
-API 文档通常在 `http://localhost:8000/docs`。
 
 ## 相关项目-特此鸣谢
 
