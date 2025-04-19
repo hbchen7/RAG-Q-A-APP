@@ -1,3 +1,4 @@
+import logging  # 导入 logging
 import os
 from contextlib import asynccontextmanager
 
@@ -5,14 +6,43 @@ from fastapi import FastAPI
 from starlette.responses import RedirectResponse
 
 from src.config.Beanie import init_db
+from src.models.user import User  # 导入 User 模型
+from src.utils.pwdHash import get_password_hash  # 导入密码哈希函数
 
-os.environ["LANGCHAIN_TRACING_V2"] = "true"
-os.environ["LANGCHAIN_PROJECT"] = "test-2025.04.14"  # 自定义用例名称
+# LANGCHAIN
+# os.environ["LANGCHAIN_TRACING_V2"] = "true"
+# ·os.environ["LANGCHAIN_PROJECT"] = "test-2025.04.14"  # 自定义用例名称
+
+# 设置简单的日志记录
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 初始化数据库
     await init_db()
+
+    # --- 添加: 首次启动时创建 root 用户 ---
+    try:
+        # 检查 root 用户是否存在
+        root_user = await User.find_one(User.username == "root")
+        if not root_user:
+            # 如果不存在，创建 root 用户
+            hashed_password = get_password_hash("123456")
+            root_user = User(
+                username="root",
+                password=hashed_password,
+                email="root@example.com",  # 提供一个默认邮箱
+            )
+            await root_user.create()
+            logger.info("Root user created successfully.")
+        else:
+            logger.info("Root user already exists.")
+    except Exception as e:
+        logger.error(f"Error during root user creation: {e}")
+    # --- 结束添加 ---
+
     yield
 
 
@@ -65,7 +95,6 @@ from fastapi.staticfiles import StaticFiles
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # 加载.env文件中的环境变量 ----------------------------------------------
-import os
 
 from dotenv import load_dotenv
 
