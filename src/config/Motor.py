@@ -1,24 +1,22 @@
-# database.py
-from motor.motor_asyncio import AsyncIOMotorClient
+# 废弃 | discard
 
-MONGO_DETAILS = "mongodb://localhost:27017"
-client = AsyncIOMotorClient(MONGO_DETAILS)
-database = client["fastapi"]
+# import os
 
-def get_collection(collection_name: str):
-    return database[collection_name]
+# from motor.motor_asyncio import AsyncIOMotorClient
 
- 
-collection_users =get_collection("users")
-async def insert_user():
-    document_user = {'name': 'bluebonnet27', 'age': 24}
-    result_insert_user = await collection_users.insert_one(document_user)
-    print('insert_user result: ')
-    print(result_insert_user.inserted_id)
+# class MongoDB:
+#     def __init__(self):
+#         self.MONGO_DETAILS = os.getenv("MONGODB_URL")
+#         if not self.MONGO_DETAILS:
+#             raise ValueError("MONGODB_URL is not set")
+#         self.client = AsyncIOMotorClient(self.MONGO_DETAILS)
+#         self.database = self.client[os.getenv("MONGO_DB_NAME")]
+#         if not self.database:
+#             raise ValueError("MONGODB_URL is not set")
 
-import asyncio
+#     def get_collection(self, collection_name: str):
+#         return self.database[collection_name]
 
-if __name__ == "__main__":
-    print("TEST: DAO")
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(insert_user())
+
+# # 创建全局实例
+# mongodb = MongoDB()

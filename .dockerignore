@@ -1,5 +1,26 @@
-   __pycache__
-   *.pyc
-   .git
-   .venv
-   .pdm-python
+
+doc/
+chroma/
+README.md
+.specstory/
+
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.venv
+.pytest_cache
+.pdm-python
+
+pdm.lock
+pyproject.toml
+
+.git
+.gitignore
+.dockerignore
+
+.cursor/
+.cursorrules
+.cursorindexingignore
+
+   

@@ -5,7 +5,7 @@ description = "Default template for PDM package"
 authors = [
     {name = "hbchen", email = "hbchen7@126.com"},
 ]
-dependencies = ["fastapi>=0.115.12", "uvicorn>=0.34.0", "python-multipart>=0.0.20", "python-dotenv>=1.1.0", "tortoise-orm>=0.24.2", "asyncpg>=0.30.0", "aerich>=0.8.2", "tomlkit>=0.13.2", "aiomysql>=0.2.0", "motor>=3.7.0", "langchain>=0.3.21", "langserve[all]>=0.3.1", "langchain-community>=0.3.20", "pypdf>=5.4.0", "langchain-chroma>=0.2.2", "langchain-openai>=0.3.11", "langchain-ollama>=0.3.0"]
+dependencies = ["fastapi>=0.115.12", "uvicorn>=0.34.0", "python-multipart>=0.0.20", "python-dotenv>=1.1.0", "tortoise-orm>=0.24.2", "asyncpg>=0.30.0", "aerich>=0.8.2", "tomlkit>=0.13.2", "aiomysql>=0.2.0", "motor>=3.7.0", "langchain>=0.3.21", "langserve[all]>=0.3.1", "langchain-community>=0.3.20", "pypdf>=5.4.0", "langchain-chroma>=0.2.2", "langchain-openai>=0.3.12", "langchain-ollama>=0.3.0", "autopep8>=2.3.2", "unstructured[docx]>=0.17.2", "python-jose[cryptography]>=3.4.0", "passlib[bcrypt]>=1.7.4", "beanie>=1.29.0", "langchain-mongodb>=0.6.0", "markdown>=3.8", "nltk>=3.9.1", "python-docx>=1.1.2"]
 requires-python = ">=3.10"
 readme = "README.md"
 license = {text = "MIT"}
@@ -15,10 +15,41 @@ requires = ["pdm-backend"]
 build-backend = "pdm.backend"
 
 
-[tool.pdm]
-distribution = true
-
 [tool.aerich]
 tortoise_orm = "settings.PostgreSQLConfig"
 location = "./migrations"
 src_folder = "./."
+
+[tool.pdm]
+distribution = true
+
+[dependency-groups]
+dev = [
+    "ruff>=0.11.4",
+    "locust>=2.34.1",
+    "deptry>=0.23.0",
+]
+
+[tool.ruff]
+# 启用 Flake8 的所有规则 (F 代码) 和 isort 的规则 (I 代码)
+# 你可以根据需要添加或删除规则代码: https://docs.astral.sh/ruff/rules/
+select = ["F", "I"]
+line-length = 88  # 设置每行最大长度
+
+# 忽略特定规则 (如果需要)
+# ignore = ["F401"] # 例如，忽略 "未使用导入"
+
+# 设置目标 Python 版本，这有助于 Ruff 应用特定版本的规则
+target-version = "py310"  # 根据你的 requires-python = ">=3.10" 设置
+
+[tool.ruff.format]
+# 如果你想使用 Black 兼容的格式化风格（推荐）
+quote-style = "double"  # 使用双引号
+indent-style = "space"  # 使用空格缩进
+skip-magic-trailing-comma = false  # 保持与 Black 一致的尾随逗号处理
+line-ending = "auto"  # 自动处理换行符
+
+# 配置 Ruff 的 import 排序功能 (类似 isort)
+[tool.ruff.lint.isort]
+# 如果你的项目有 src 目录，将它添加到已知的第一方包路径中
+known-first-party = ["src"]  # 取消注释并根据你的项目结构调整

@@ -1,5 +1,22 @@
+doc/
+.cursor/
+.cursorrules
+.cursorindexingignore
+.specstory
+.env.dev
+.env.prod
+compose.yml
+# chroma
+chroma/
+
 # Byte-compiled / optimized / DLL files
-__pycache__/
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.venv
+.pytest_cache
+.pdm-python
 *.py[cod]
 *$py.class
 
@@ -122,7 +139,6 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
 .venv
 env/
 venv/

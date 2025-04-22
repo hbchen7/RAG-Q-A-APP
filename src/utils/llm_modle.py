@@ -1,27 +1,52 @@
-from dotenv import load_dotenv
-load_dotenv()
 import os
+
+from langchain_ollama import ChatOllama
+
 # llm
 from langchain_openai import ChatOpenAI
 from langchain_openai.chat_models.base import BaseChatOpenAI
-from langchain_ollama import ChatOllama
 
-class LLMModel:
+ONEAPI_BASE_URL = os.getenv("ONEAPI_BASE_URL")
 
-  def chose_llms(self,supplier:str, model_name:str):
-    if supplier == "openai":
-      return  ChatOpenAI(model_name = model_name|"gpt-4o-mini")
-    elif supplier == "siliconflow":
-      llm = BaseChatOpenAI(
-      model=os.getenv("MODEL"),  # 使用DeepSeek聊天模型
-      openai_api_key=os.getenv("OPENAI_API_KEY"),  
-      openai_api_base=os.getenv("OPENAI_API_BASE"),  
-      max_tokens=int(os.getenv("MAX_TOKENS")))
-      return llm
-    elif supplier == "ollama":
-      llm = ChatOllama(
-      model=model_name,
-      temperature=0.8,)
-      return llm
-    else:
-      return None
+
+def get_llms(
+    supplier: str,
+    model: str,
+    api_key: str = None,
+    max_length: int = 10,
+    temperature: float = 0.8,
+):
+    try:
+        """
+        获取LLM模型
+        """
+        if supplier == "openai":
+            return ChatOpenAI(model=model, temperature=temperature)
+        elif supplier == "siliconflow":
+            return BaseChatOpenAI(
+                model=os.getenv("SILICONFLOW_MODEL"),  # 使用DeepSeek聊天模型
+                openai_api_key=os.getenv("SILICONFLOW_API_KEY"),
+                openai_api_base=os.getenv("SILICONFLOW_URL"),
+                # max_tokens=int(os.getenv("MAX_TOKENS")),
+            )
+
+        elif supplier == "ollama":
+            return ChatOllama(model=model)
+        elif supplier == "oneapi":
+            return ChatOpenAI(
+                api_key=api_key,
+                base_url=ONEAPI_BASE_URL,
+                model=model,
+                temperature=temperature,
+            )
+        else:
+            raise ValueError(f"Unsupported supplier: {supplier}")
+    except Exception as e:
+        print(f"Error: {e}")
+        raise ConnectionError(f"Error: {e}")
+
+
+if __name__ == "__main__":
+    model = "deepseek-r1:latest"  # 使用DeepSeek聊天模型
+    llm = get_llms(supplier="ollama", model=model, max_length=10086)
+    print(llm.invoke("你好"))

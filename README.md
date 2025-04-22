@@ -1,27 +1,80 @@
-#
+# RAG-知识库问答系统
 
-# 技术栈
+本项目是一个基于 Langchain、FastAPI、Chroma 和 MongoDB 构建的 RAG (Retrieval-Augmented Generation) 知识库问答系统。
 
-- Python 3.10.6
-- FastAPI // web 框架
-- unicorn // web 服务框架
+## 主要功能
 
-# 项目结构
+### RAG
 
-- main.py // 项目入口文件
-- src // 项目主目录
-- tests // 测试用例目录
-- requirements.txt // 项目依赖文件
-- Dockerfile // 项目打包文件
+- 知识库管理
+- 单文件检索与知识库检索
+- 单文件检索：支持通过元数据过滤（指定文件 MD5）实现对知识库中特定文件的检索问答。
 
-# 运行项目指导
+### LLM 对话
 
-```
-## 安装依赖
-pdm install -r requirements.txt
-```
+- 流式输出
+- 助手会话管理
+- 提示词自定义
+- 历史消息功能
 
-```
 ## 运行项目
-uvicorn main:app --reload
+
+### docker 运行(推荐)
+
+1. 确保安装了 docker 环境 ->[Docker Desktop](https://www.docker.com/products/docker-desktop/).
+2. 需要使用 docker 部署 [One API](https://github.com/songquanpeng/one-api) 作为大模型网关，在 docker-compose.yml 为每个服务添加`    - baota_net # 添加对共享外部网络的连接`,接着运行`docker compose up -d`
+3. 在 fastapi 项目的.env 文件中配置你的数据库连接信息等环境变量。
+4. 在项目根目录下依次运行:
+
+```bash
+docker network create baota_net
 ```
+
+```bash
+docker-compose up --build
+```
+
+5. 运行成功后，即可访问 API 文档： `http://localhost:8080/docs`。
+
+### 本地运行
+
+1. 确保安装了 Python 环境 (v3.10.6+)、安装 MongoDB 数据库 (v5.0+)
+2. 需要使用 docker 部署 [One API](https://github.com/songquanpeng/one-api) 作为大模型网关，部署教程：
+3. 安装 pdm: `pip install pdm`
+4. 在项目根目录.env 文件中配置数据库连接信息、 MONGODB_URL 等环境变量。
+5. 在项目根目录下依次运行:
+
+```bash
+pdm init # 初始化 PDM 项目，创建虚拟环境
+```
+
+```bash
+pdm install # 安装项目依赖
+```
+
+```bash
+uvicorn src.main:app --reload --host 0.0.0.0 --port 8080 # 启动 FastAPI 应用
+```
+
+4. 浏览器访问 API 文档： `http://localhost:8080/docs`。
+
+# 项目博客
+
+- [langchain 项目如何实现流式输出经验分享](https://blog.csdn.net/m0_70647377/article/details/147422163)
+
+# 关于作者
+
+- ~~[个人网站]()~~:挖坑待填,敬请期待~
+- [Github](https://github.com/hbchen7)
+- [CSDN](https://blog.csdn.net/m0_70647377?spm=1000.2115.3001.5343)
+- [BiliBili](https://space.bilibili.com/1608655290)
+
+# 特此鸣谢
+
+- [One API](https://github.com/songquanpeng/one-api)
+- [langchain-API 文档](https://python.langchain.com/api_reference/)
+
+# 特此鸣谢
+
+- [One API](https://github.com/songquanpeng/one-api)
+- [langchain-API 文档](https://python.langchain.com/api_reference/)
