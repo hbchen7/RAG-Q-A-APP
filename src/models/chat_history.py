@@ -19,6 +19,8 @@ class ChatHistoryMessage(Document):
 
     class Settings:
         # Set the collection name based on environment variable or default
-        name = os.getenv("MONGODB_COLLECTION_NAME_CHATHISTORY", "chatHistoy")
+        name = os.getenv("MONGODB_COLLECTION_NAME_CHATHISTORY")
+        if not name:
+            raise ValueError("MONGODB_COLLECTION_NAME_CHATHISTORY is not set")
         # Keep nulls=False is generally a good practice with Beanie
         keep_nulls = False

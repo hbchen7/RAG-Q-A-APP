@@ -7,14 +7,12 @@ from bson import ObjectId  # 用于验证 kb_id
 from fastapi import HTTPException, UploadFile  # 添加 HTTPException
 from langchain_chroma import Chroma  # 添加 Chroma 导入
 
-from models.knowledgeBase import (
+from src.models.knowledgeBase import (
     KnowledgeBase as KnowledgeBaseModel,  # 重命名导入的模型以避免与 Pydantic 模型冲突
 )
-from utils.embedding import get_embedding
-from utils.Knowledge import Knowledge
+from src.utils.embedding import get_embedding
+from src.utils.Knowledge import Knowledge
 
-# 假设 chroma_dir 在 Knowledge 类或全局定义中可用
-# from utils.Knowledge import chroma_dir # 或者直接在这里定义/获取
 chroma_dir = "chroma/"  # 确保这里有定义
 
 

@@ -195,11 +195,19 @@ async def get_session_history(
                 # content 在 data 字典下
                 message_content = history_data.get("data", {}).get("content")
 
-                if message_type and message_content is not None:
+                # --- Bug修复：统一 AI 消息类型 ---
+                # 如果原始类型是 AIMessageChunk（来自流式处理），将其规范化为 'ai'
+                if message_type == "AIMessageChunk":
+                    corrected_type = "ai"
+                else:
+                    corrected_type = message_type
+                # ---------------------------------
+
+                if corrected_type and message_content is not None:
                     items.append(
                         {
                             "id": str(doc.id),
-                            "type": message_type,
+                            "type": corrected_type,
                             "content": message_content,
                         }
                     )

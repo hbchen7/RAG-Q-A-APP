@@ -6,7 +6,6 @@
 import logging
 from typing import Iterable, Optional
 
-from dotenv import load_dotenv
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.retrieval import create_retrieval_chain
 from langchain_community.chat_message_histories import ChatMessageHistory
@@ -20,8 +19,6 @@ from src.utils.Knowledge import Knowledge
 
 # utils
 from src.utils.llm_modle import get_llms
-
-load_dotenv()
 
 
 class ChatSev:

@@ -2,7 +2,6 @@ import os
 from hashlib import md5
 from typing import List, Optional
 
-from dotenv import load_dotenv
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.document_compressors import CrossEncoderReranker
 from langchain_chroma import Chroma
@@ -12,7 +11,6 @@ from langchain_core.retrievers import BaseRetriever
 
 from src.utils.DocumentChunker import DocumentChunker
 
-load_dotenv()
 # 设置知识库 向量模型 重排序模型的路径
 rerank_model = r"D:\python_project\BAAI\bge-reranker-large"  # 重排序模型
 chroma_dir = "chroma/"  # 向量数据库的路径

@@ -2,16 +2,28 @@ import logging  # 导入 logging
 import os
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from starlette.responses import RedirectResponse
+
+load_dotenv()  # 加载 .env 基础配置
+app_env = os.getenv("APP_ENV")
+if app_env:
+    dotenv_path = f".env.{app_env}"
+    print(dotenv_path)
+    load_dotenv(
+        dotenv_path=dotenv_path, override=True
+    )  # override=True 特定环境文件覆盖 .env
+# load_dotenv(dotenv_path=".env.dev", override=True)
+
+
+# LANGCHAIN
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_PROJECT"] = "test-2025.04.21"  # 自定义用例名称
 
 from src.config.Beanie import init_db
 from src.models.user import User  # 导入 User 模型
 from src.utils.pwdHash import get_password_hash  # 导入密码哈希函数
-
-# LANGCHAIN
-# os.environ["LANGCHAIN_TRACING_V2"] = "true"
-# ·os.environ["LANGCHAIN_PROJECT"] = "test-2025.04.14"  # 自定义用例名称
 
 # 设置简单的日志记录
 logging.basicConfig(level=logging.INFO)
@@ -63,13 +75,11 @@ app.add_middleware(
 from src.middleware.reqInfo import request_info_middleware
 
 app.middleware("http")(request_info_middleware)
-# 响应时间中间件
 
 #  import router -------------------------------------------------------
 from src.router.assistantRouter import AssistantRouter
 from src.router.auth import AuthRouter
 from src.router.chatRouter import ChatRouter
-from src.router.ConfigRouter import ConfigRouter
 from src.router.knowledgeRouter import knowledgeRouter
 from src.router.sessionRouter import SessionRouter
 from src.router.userRouter import UserRouter
@@ -78,7 +88,6 @@ app.include_router(router=AuthRouter)
 app.include_router(router=UserRouter, prefix="/user", tags=["user"])
 app.include_router(router=ChatRouter, prefix="/chat", tags=["chat"])
 app.include_router(router=knowledgeRouter, prefix="/knowledge", tags=["knowledge"])
-app.include_router(router=ConfigRouter, prefix="/config", tags=["config"])
 app.include_router(router=SessionRouter, prefix="/session", tags=["session"])
 app.include_router(router=AssistantRouter, prefix="/assistant", tags=["assistant"])
 
@@ -90,15 +99,10 @@ async def redirect_to_docs():
 
 
 #  静态文件  -----------------------------------------------------------
-from fastapi.staticfiles import StaticFiles
+# from fastapi.staticfiles import StaticFiles
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# 加载.env文件中的环境变量 ----------------------------------------------
-
-from dotenv import load_dotenv
-
-load_dotenv()
 
 # 启动web服务 ----------------------------------------------------------
 import uvicorn
@@ -106,4 +110,5 @@ import uvicorn
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))  # 默认端口设置为8080
     host = os.getenv("HOST", "127.0.0.1")  # 默认主机设置为127.0.0.1
+    # uvicorn.run("main:app", host=host, port=port)
     uvicorn.run("main:app", host=host, port=port, reload=True)

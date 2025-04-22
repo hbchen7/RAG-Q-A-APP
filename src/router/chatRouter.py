@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 
+from src.models.knowledgeBase import KnowledgeBase
 from src.service.ChatSev import ChatSev
 from src.utils.embedding import get_embedding
 from src.utils.Knowledge import Knowledge
@@ -26,9 +27,6 @@ class KnowledgeConfig(BaseModel):
     knowledge_base_id: str
     filter_by_file_md5: Optional[str] = None
     search_k: Optional[int] = Field(default=3, ge=1)
-    embedding_supplier: str = "oneapi"
-    embedding_model: str = "BAAI/bge-m3"
-    embedding_api_key: Optional[str] = None
     is_reorder: bool = False
 
 
@@ -50,14 +48,16 @@ async def get_chat_service(request: ChatRequest) -> ChatSev:
     knowledge_instance: Optional[Knowledge] = None
     if request.knowledge_config:
         try:
-            _embedding = get_embedding(
-                request.knowledge_config.embedding_supplier,
-                request.knowledge_config.embedding_model,
-                request.knowledge_config.embedding_api_key,
-            )
-            knowledge_instance = Knowledge(
-                _embeddings=_embedding, reorder=request.knowledge_config.is_reorder
-            )
+            kb = await KnowledgeBase.get(request.knowledge_config.knowledge_base_id)
+            if kb.embedding_config:
+                _embedding = get_embedding(
+                    kb.embedding_config.embedding_supplier,
+                    kb.embedding_config.embedding_model,
+                    kb.embedding_config.embedding_apikey,
+                )
+                knowledge_instance = Knowledge(
+                    _embeddings=_embedding, reorder=request.knowledge_config.is_reorder
+                )
         except Exception as e:
             logging.error(
                 f"错误：初始化 Knowledge 工具失败 ({e})。将不使用知识库。",

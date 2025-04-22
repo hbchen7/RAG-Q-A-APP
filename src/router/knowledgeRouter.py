@@ -6,7 +6,7 @@ from pydantic import BaseModel
 import src.service.knowledgeSev as knowledgeSev
 
 # 导入 EmbeddingConfig 以便在 KnowledgeBaseCreate 中使用
-from models.knowledgeBase import EmbeddingConfig
+from src.models.knowledgeBase import EmbeddingConfig
 from src.service.userSev import get_current_user
 
 knowledgeRouter = APIRouter()

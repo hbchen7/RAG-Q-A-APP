@@ -1,17 +1,22 @@
-from motor.motor_asyncio import AsyncIOMotorClient
-from dotenv import load_dotenv
-import os
+# 废弃 | discard
 
-load_dotenv()
+# import os
 
-class MongoDB:
-    def __init__(self):
-        self.MONGO_DETAILS = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-        self.client = AsyncIOMotorClient(self.MONGO_DETAILS)
-        self.database = self.client[os.getenv("MONGO_DB", "fastapi")]
-    
-    def get_collection(self, collection_name: str):
-        return self.database[collection_name]
+# from motor.motor_asyncio import AsyncIOMotorClient
 
-# 创建全局实例
-mongodb = MongoDB()
+# class MongoDB:
+#     def __init__(self):
+#         self.MONGO_DETAILS = os.getenv("MONGODB_URL")
+#         if not self.MONGO_DETAILS:
+#             raise ValueError("MONGODB_URL is not set")
+#         self.client = AsyncIOMotorClient(self.MONGO_DETAILS)
+#         self.database = self.client[os.getenv("MONGO_DB_NAME")]
+#         if not self.database:
+#             raise ValueError("MONGODB_URL is not set")
+
+#     def get_collection(self, collection_name: str):
+#         return self.database[collection_name]
+
+
+# # 创建全局实例
+# mongodb = MongoDB()

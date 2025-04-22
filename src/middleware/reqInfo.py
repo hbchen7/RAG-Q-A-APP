@@ -1,5 +1,5 @@
 from fastapi import Request
-from fastapi.responses import Response
+
 
 async def request_info_middleware(request: Request, call_next):
     print(f"请求方法: {request.method}, 路径: {request.url.path}")

@@ -10,7 +10,6 @@ from typing import (
 )
 
 from bson import ObjectId
-from dotenv import load_dotenv
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.retrieval import create_retrieval_chain
 from langchain_core.chat_history import BaseChatMessageHistory
@@ -19,6 +18,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import (
     ConfigurableFieldSpec,  # f-流式输出
     RunnableConfig,  # f-流式输出
+    RunnableLambda,  # 新增导入
     RunnableSerializable,  # f-流式输出
 )
 from langchain_core.runnables.history import (
@@ -35,8 +35,6 @@ from src.utils.Knowledge import Knowledge
 # utils
 from src.utils.llm_modle import get_llms
 
-load_dotenv()
-
 
 class ChatSev:
     # 废弃-移除类级别的内存历史记录实例
@@ -52,14 +50,23 @@ class ChatSev:
         # self.chat_history_max_length = chat_history_max_length # 暂时注释掉，因为 MongoDB History 不直接限制长度
 
         # 从环境变量读取 MongoDB 配置
-        self.mongo_connection_string = os.getenv(
-            "MONGO_URI", "mongodb://localhost:27017/"
-        )
-        self.mongo_database_name = os.getenv("MONGO_DB_NAME", "fastapi")
+        # 使用包含认证信息的 MONGODB_URL
+        self.mongo_connection_string = os.getenv("MONGODB_URL")
+        if not self.mongo_connection_string:
+            raise ValueError(
+                "错误：环境变量 MONGODB_URL 未设置或为空。请检查您的 .env 文件或系统环境变量。"
+            )
+        self.mongo_database_name = os.getenv("MONGO_DB_NAME")
+        if not self.mongo_database_name:
+            raise ValueError(
+                "错误：环境变量 MONGO_DB_NAME 未设置或为空。请检查您的 .env 文件或系统环境变量。"
+            )
         # 使用 .env 中定义的集合名称
-        self.mongo_collection_name = os.getenv(
-            "MONGODB_COLLECTION_NAME_CHATHISTORY", "chatHistoy"
-        )
+        self.mongo_collection_name = os.getenv("MONGODB_COLLECTION_NAME_CHATHISTORY")
+        if not self.mongo_collection_name:
+            raise ValueError(
+                "错误：环境变量 MONGODB_COLLECTION_NAME_CHATHISTORY 未设置或为空。请检查您的 .env 文件或系统环境变量。"
+            )
         self.prompt = prompt  # f-提示词功能-传入自定义提示词
         self.knowledge_prompt = None  # 问答模板
         self.normal_prompt = None  # 正常模板
@@ -186,22 +193,41 @@ class ChatSev:
                 logging.warning(
                     f"无法加载知识库 {knowledge_base_id} (可能不存在或无法访问): {e}。将退回到普通聊天模式。"
                 )
+
                 # RAG 出错，退回普通链，最后一步是 chat (LLM)，输出是 AIMessage
-                base_chain = self.normal_prompt | chat
+                def wrap_normal_output(message: BaseMessage) -> Dict[str, Any]:
+                    return {"answer": message}
+
+                base_chain = (
+                    self.normal_prompt | chat | RunnableLambda(wrap_normal_output)
+                )
                 context_display_name = "标准对话 (知识库错误)"  # 更新上下文
             except Exception as e:
                 logging.error(
                     f"获取知识库检索器或创建 RAG 链时出错 ({knowledge_base_id}): {e}",
                     exc_info=True,
                 )
+
                 # RAG 出错，退回普通链
-                base_chain = self.normal_prompt | chat
+                def wrap_normal_output(message: BaseMessage) -> Dict[str, Any]:
+                    return {"answer": message}
+
+                base_chain = (
+                    self.normal_prompt | chat | RunnableLambda(wrap_normal_output)
+                )
                 context_display_name = "标准对话 (知识库错误)"  # 更新上下文
 
         else:
             logging.info("不使用知识库，使用普通聊天模式。")
+
             # 普通链，最后一步是 chat (LLM)，输出是 AIMessage
-            base_chain = self.normal_prompt | chat
+            # 旧方式: base_chain = self.normal_prompt | chat
+            # 新方式: 包装输出为 {"answer": AIMessage(...)}，与 RAG 链统一
+            def wrap_normal_output(message: BaseMessage) -> Dict[str, Any]:
+                return {"answer": message}
+
+            base_chain = self.normal_prompt | chat | RunnableLambda(wrap_normal_output)
+            # context_display_name 已在上面设置，无需修改
 
         return context_display_name, base_chain
 
@@ -250,7 +276,7 @@ class ChatSev:
                 self.get_session_chat_history,  # f-历史会话-获取会话历史-MongoDBChatMessageHistory
                 input_messages_key="input",  # base_chain 需要 'input'
                 history_messages_key="chat_history",  # prompt 需要 'chat_history'
-                # output_messages_key="answer", # 指定历史记录存储的键，对流式输出内容影响不大
+                output_messages_key="answer",  # 新增：指定从 base_chain 输出字典中提取 'answer' 作为 AI 消息保存
                 history_factory_config=[
                     ConfigurableFieldSpec(
                         id="session_id",
