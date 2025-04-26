@@ -1,6 +1,7 @@
 import logging  # 导入 logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -19,7 +20,9 @@ if app_env:
 
 # LANGCHAIN
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
-os.environ["LANGCHAIN_PROJECT"] = "test-2025.04.21"  # 自定义用例名称
+os.environ["LANGCHAIN_PROJECT"] = (
+    f"test-{datetime.now().strftime('%Y.%m.%d:%H')}"  # 自定义用例名称,使用当前日期:XX时
+)
 
 from src.config.Beanie import init_db
 from src.models.user import User  # 导入 User 模型
@@ -110,5 +113,5 @@ import uvicorn
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))  # 默认端口设置为8080
     host = os.getenv("HOST", "127.0.0.1")  # 默认主机设置为127.0.0.1
-    # uvicorn.run("main:app", host=host, port=port)
-    uvicorn.run("main:app", host=host, port=port, reload=True)
+    uvicorn.run("main:app", host=host, port=port)
+    # uvicorn.run("main:app", host=host, port=port, reload=True)

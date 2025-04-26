@@ -1,6 +1,6 @@
 import os
 from hashlib import md5
-from typing import List, Optional
+from typing import Optional
 
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.document_compressors import CrossEncoderReranker
@@ -21,9 +21,10 @@ chroma_dir = "chroma/"  # 向量数据库的路径
 class Knowledge:
     """知识库工具类，处理向量化、存储和检索"""
 
-    def __init__(self, _embeddings=None, reorder=False):
+    def __init__(self, _embeddings=None, reorder=False, splitter="hybrid"):
         self.reorder = reorder  # 是否重排序 启动重排序模型，时间会增加
         self._embeddings = _embeddings
+        self.splitter = splitter
         if not self._embeddings:
             # 如果没有提供 embedding 函数，某些操作会失败，可以考虑抛出异常或警告
             print("警告: Knowledge 类在没有提供 embedding 函数的情况下初始化。")
@@ -63,13 +64,34 @@ class Knowledge:
 
         # --- 1. 加载和分块文档 ---
         try:
-            print(f"使用 DocumentChunker 加载和分块: {file_path}")
-            loader = DocumentChunker(file_path)  # 假设 DocumentChunker 存在且可用
-            documents: List[Document] = loader.load()
+            print(
+                f"使用 DocumentChunker (类型: {self.splitter}) 加载和分块: {file_path}"
+            )
+
+            # 使用混合分割策略
+            loader = DocumentChunker(
+                file_path,
+                splitter_type=self.splitter,  # 'hybrid' 或其他选项
+                embeddings=self._embeddings,  # 对于 'hybrid' 和 'semantic' 模式需要
+                chunk_size=500,  # 可以根据需要调整
+                chunk_overlap=50,  # 可以根据需要调整
+            )
+
+            documents = loader.load()
             if not documents:
                 print(f"警告: 文件 {file_path} 未产生任何文档块，跳过处理。")
                 return
             print(f"文件 {file_path} 加载并分块完成，共 {len(documents)} 块。")
+        except ImportError as e:
+            print(f"错误：看起来缺少使用 SemanticChunker 所需的库: {e}")
+            print(
+                "请尝试运行: pdm add langchain_experimental sentence-transformers bert_score"
+            )
+            raise
+        except ValueError as e:
+            # 捕获 DocumentChunker 内部抛出的 ValueError，例如 embeddings 未提供
+            print(f"处理文档时发生配置错误: {e}")
+            raise
         except Exception as e:
             print(f"加载或分块文件 {file_path} 时出错: {e}")
             raise
