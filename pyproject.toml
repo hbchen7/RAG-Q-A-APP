@@ -5,7 +5,7 @@ description = "Default template for PDM package"
 authors = [
     {name = "hbchen", email = "hbchen7@126.com"},
 ]
-dependencies = ["fastapi>=0.115.12", "uvicorn>=0.34.0", "python-multipart>=0.0.20", "python-dotenv>=1.1.0", "tortoise-orm>=0.24.2", "asyncpg>=0.30.0", "aerich>=0.8.2", "tomlkit>=0.13.2", "aiomysql>=0.2.0", "motor>=3.7.0", "langchain>=0.3.21", "langserve[all]>=0.3.1", "langchain-community>=0.3.20", "pypdf>=5.4.0", "langchain-chroma>=0.2.2", "langchain-openai>=0.3.12", "langchain-ollama>=0.3.0", "autopep8>=2.3.2", "unstructured[docx]>=0.17.2", "python-jose[cryptography]>=3.4.0", "passlib[bcrypt]>=1.7.4", "beanie>=1.29.0", "langchain-mongodb>=0.6.0", "markdown>=3.8", "nltk>=3.9.1", "python-docx>=1.1.2", "langchain-experimental>=0.3.4", "sentence-transformers>=4.1.0", "bert-score>=0.3.13"]
+dependencies = ["fastapi>=0.115.12", "uvicorn>=0.34.0", "python-multipart>=0.0.20", "python-dotenv>=1.1.0", "tortoise-orm>=0.24.2", "asyncpg>=0.30.0", "aerich>=0.8.2", "tomlkit>=0.13.2", "aiomysql>=0.2.0", "motor>=3.7.0", "langchain>=0.3.21", "langserve[all]>=0.3.1", "langchain-community>=0.3.20", "pypdf>=5.4.0", "langchain-chroma>=0.2.2", "langchain-openai>=0.3.12", "langchain-ollama>=0.3.0", "autopep8>=2.3.2", "unstructured[docx]>=0.17.2", "python-jose[cryptography]>=3.4.0", "passlib[bcrypt]>=1.7.4", "beanie>=1.29.0", "langchain-mongodb>=0.6.0", "markdown>=3.8", "nltk>=3.9.1", "python-docx>=1.1.2", "langchain-experimental>=0.3.4", "sentence-transformers>=4.1.0", "bert-score>=0.3.13", "langchain-mcp-adapters>=0.0.9", "langgraph>=0.3.34"]
 requires-python = ">=3.10"
 readme = "README.md"
 license = {text = "MIT"}
