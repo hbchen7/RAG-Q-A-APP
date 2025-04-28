@@ -23,7 +23,11 @@ app = FastAPI()
 
 # MCP客户端配置
 mcp_config = {
-    "howtocook-mcp": {"command": "npx", "args": ["-y", "howtocook-mcp"]}
+    "howtocook-mcp": {"command": "npx", "args": ["-y", "howtocook-mcp"]},
+    # "current_datetime": {
+    #     "command": "mcp-proxy",
+    #     "args": ["http://127.0.0.1:8001/current_datetime"],
+    # },
     # 可以添加更多MCP服务配置
 }
 
