@@ -6,7 +6,6 @@ from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.document_compressors import CohereRerank
 from langchain_community.llms import Cohere
 
-
 # 使用Cohere重新排名端点来对返回的结果进行重新排名
 llm = Cohere(temperature=0)
 
@@ -15,7 +14,9 @@ compressor = CohereRerank()
 # 创建上下文压缩检索器：需要传入一个文档压缩器和基本检索器
 # 上下文压缩检索器将查询传递到基本检索器，获取初始文档并将它们传递到文档压缩器。
 # 文档压缩器获取文档列表，并通过减少文档内容或完全删除文档来缩短文档列表。
-compression_retriever = ContextualCompressionRetriever(base_compressor=compressor, base_retriever=retriever)
+compression_retriever = ContextualCompressionRetriever(
+    base_compressor=compressor, base_retriever=retriever
+)
 
 question = "llama2有多少参数？"
 compressed_docs = compression_retriever.invoke(question)

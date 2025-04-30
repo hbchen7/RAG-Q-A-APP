@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from typing import (
@@ -9,6 +10,7 @@ from typing import (
     Union,
 )
 
+import redis.asyncio as aioredis  # 导入 aioredis
 from bson import ObjectId
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.retrieval import create_retrieval_chain
@@ -18,7 +20,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import (
     ConfigurableFieldSpec,  # f-流式输出
     RunnableConfig,  # f-流式输出
-    RunnableLambda,  # 新增导入
+    RunnableLambda,
     RunnableSerializable,  # f-流式输出
 )
 from langchain_core.runnables.history import (
@@ -28,12 +30,21 @@ from langchain_mongodb.chat_message_histories import (
     MongoDBChatMessageHistory,  # f-历史会话-持久化会话历史数据
 )
 
+# Redis 缓存
+from src.config.Redis import get_redis_client
+
 # Beanie模型
 from src.models.knowledgeBase import KnowledgeBase as KnowledgeBaseModel
+from src.service.knowledgeSev import (  # 导入缓存设置函数和前缀
+    KB_CACHE_PREFIX,
+    _set_kb_cache,
+)
 from src.utils.Knowledge import Knowledge
 
 # utils
 from src.utils.llm_modle import get_llms
+
+logger = logging.getLogger(__name__)
 
 
 class ChatSev:
@@ -118,9 +129,9 @@ class ChatSev:
         search_k: int,
         max_length: Optional[int],
         temperature: float,
-    ) -> Tuple[str, RunnableSerializable]:  # 使用 Tuple 类型提示
-        """辅助函数：确定上下文显示名称和基础链"""
-        context_display_name = "标准对话"  # f-流式输出-上下文显示名称
+    ) -> Tuple[str, RunnableSerializable]:
+        """辅助函数：确定上下文显示名称和基础链。优先从 Redis 读取知识库元数据。"""
+        context_display_name = "标准对话"
         chat = get_llms(
             supplier=supplier,
             model=model,
@@ -134,100 +145,161 @@ class ChatSev:
             logging.info(
                 f"使用知识库: {knowledge_base_id}, 文件过滤器 MD5: {filter_by_file_md5}"
             )
+            kb_data = None  # 存储从缓存或 DB 获取的知识库数据
+
+            # 尝试从 Redis 缓存获取
             try:
-                # 获取知识库文档
                 if ObjectId.is_valid(knowledge_base_id):
+                    redis = get_redis_client()
+                    cache_key = f"{KB_CACHE_PREFIX}{knowledge_base_id}"
+                    cached_data_str = await redis.get(cache_key)
+                    if cached_data_str:
+                        kb_data = json.loads(cached_data_str)  # 反序列化 JSON
+                        logger.info(f"从 Redis 缓存命中知识库: {knowledge_base_id}")
+                    else:
+                        logger.info(f"Redis 缓存未命中知识库: {knowledge_base_id}")
+                else:
+                    logger.warning(
+                        f"提供的 knowledge_base_id 无效 (格式错误): {knowledge_base_id}"
+                    )
+
+            except aioredis.RedisError as e:
+                logger.error(
+                    f"访问 Redis 缓存知识库 {knowledge_base_id} 时出错: {e}. 将尝试从 MongoDB 回退。"
+                )
+                kb_data = None  # 确保在出错时重置
+            except json.JSONDecodeError as e:
+                logger.error(
+                    f"解析 Redis 缓存中的知识库 {knowledge_base_id} 数据时出错: {e}. 将尝试从 MongoDB 回退。"
+                )
+                kb_data = None  # 确保在出错时重置
+            except Exception as e:
+                logger.error(
+                    f"读取或解析 Redis 缓存 {knowledge_base_id} 时发生未知错误: {e}",
+                    exc_info=True,
+                )
+                kb_data = None
+
+            # 如果缓存未命中或出错，则从 MongoDB 回退
+            if kb_data is None and ObjectId.is_valid(knowledge_base_id):
+                logger.info(f"尝试从 MongoDB 获取知识库: {knowledge_base_id}")
+                try:
                     knowledge_base_doc = await KnowledgeBaseModel.get(
                         ObjectId(knowledge_base_id)
                     )
                     if knowledge_base_doc:
-                        if filter_by_file_md5:
-                            file_found = False
-                            if knowledge_base_doc.filesList:
-                                for file_info in knowledge_base_doc.filesList:
-                                    # 确保比较的是字符串
-                                    if str(file_info.get("file_md5")) == str(
-                                        filter_by_file_md5
-                                    ):
-                                        context_display_name = f"文件：{file_info.get('file_name', '未知文件名')}"
-                                        file_found = True
-                                        break
-                            if not file_found:
-                                logging.warning(
-                                    f"在知识库 {knowledge_base_id} 中未找到 MD5 为 {filter_by_file_md5} 的文件，将显示知识库名称。"
-                                )
-                                context_display_name = (
-                                    f"知识库：{knowledge_base_doc.title}"
-                                )
-                        else:
-                            context_display_name = f"知识库：{knowledge_base_doc.title}"
+                        logger.info(f"从 MongoDB 成功获取知识库: {knowledge_base_id}")
+                        # 将 Beanie 文档转换为字典，以便后续逻辑统一处理
+                        kb_data = knowledge_base_doc.model_dump(mode="json")
+                        # 尝试写回缓存 (缓存自愈)
+                        await _set_kb_cache(
+                            knowledge_base_doc
+                        )  # 使用 knowledgeSev 中的辅助函数
                     else:
-                        logging.warning(
-                            f"未找到 ID 为 {knowledge_base_id} 的知识库文档。"
+                        logger.warning(
+                            f"在 MongoDB 中未找到 ID 为 {knowledge_base_id} 的知识库文档。"
                         )
+                except Exception as e:
+                    logger.error(f"查询 MongoDB 知识库 {knowledge_base_id} 时出错: {e}")
+
+            # 使用获取到的 kb_data (来自缓存或 DB) 设置上下文名称
+            if kb_data:
+                kb_title = kb_data.get("title", "未知知识库")
+                if filter_by_file_md5:
+                    file_found = False
+                    # 确保 filesList 存在且是列表
+                    files_list = kb_data.get("filesList")
+                    if isinstance(files_list, list):
+                        for file_info in files_list:
+                            # 确保 file_info 是字典且包含 file_md5
+                            if isinstance(file_info, dict) and str(
+                                file_info.get("file_md5")
+                            ) == str(filter_by_file_md5):
+                                context_display_name = (
+                                    f"文件：{file_info.get('file_name', '未知文件名')}"
+                                )
+                                file_found = True
+                                break
+                    if not file_found:
+                        logger.warning(
+                            f"在知识库 {knowledge_base_id} (来自 {'缓存' if cached_data_str else 'DB'}) 中未找到 MD5 为 {filter_by_file_md5} 的文件，将显示知识库名称。"
+                        )
+                        context_display_name = f"知识库：{kb_title}"
                 else:
+                    context_display_name = f"知识库：{kb_title}"
+            else:
+                # 如果缓存和 DB 都获取失败
+                logger.warning(
+                    f"无法从缓存或 MongoDB 获取知识库 {knowledge_base_id} 的元数据。"
+                )
+                context_display_name = "标准对话 (知识库数据错误)"
+
+            # --- RAG 链创建逻辑 (基本不变，依赖 kb_data 是否有效来决定是否创建 RAG) ---
+            if kb_data:  # 只有成功获取到数据才尝试创建 RAG 链
+                filter_dict = None
+                if filter_by_file_md5:
+                    filter_dict = {"source_file_md5": str(filter_by_file_md5)}
+
+                try:
+                    retriever = self.knowledge.get_retriever_for_knowledge_base(
+                        kb_id=knowledge_base_id,
+                        filter_dict=filter_dict,
+                        search_k=search_k,
+                    )
+                    question_answer_chain = create_stuff_documents_chain(
+                        chat, self.knowledge_prompt
+                    )
+                    base_chain = create_retrieval_chain(
+                        retriever, question_answer_chain
+                    )
+                    logging.info("RAG 链创建成功。")
+                except FileNotFoundError as e:
                     logging.warning(
-                        f"提供的 knowledge_base_id 无效: {knowledge_base_id}"
+                        f"无法加载知识库向量存储 {knowledge_base_id} (可能不存在或无法访问): {e}。将退回到普通聊天模式。"
                     )
 
-            except Exception as e:
-                logging.error(f"查询知识库文档 {knowledge_base_id} 时出错: {e}")
+                    def wrap_normal_output(message: BaseMessage) -> Dict[str, Any]:
+                        return {"answer": message}
 
-            filter_dict = None  # f-单文件检索-过滤字典
-            if filter_by_file_md5:
-                filter_dict = {
-                    "source_file_md5": str(filter_by_file_md5)
-                }  # 确保是字符串
+                    base_chain = (
+                        self.normal_prompt | chat | RunnableLambda(wrap_normal_output)
+                    )
+                    context_display_name = "标准对话 (知识库向量错误)"  # 更新上下文
+                except Exception as e:
+                    logging.error(
+                        f"获取知识库检索器或创建 RAG 链时出错 ({knowledge_base_id}): {e}",
+                        exc_info=True,
+                    )
 
-            try:
-                retriever = self.knowledge.get_retriever_for_knowledge_base(
-                    kb_id=knowledge_base_id, filter_dict=filter_dict, search_k=search_k
-                )
-                question_answer_chain = create_stuff_documents_chain(
-                    chat, self.knowledge_prompt
-                )
-                # create_retrieval_chain 的结果是一个 Runnable，其输出是一个字典，包含 'answer' 和 'context'
-                base_chain = create_retrieval_chain(retriever, question_answer_chain)
-                logging.info("RAG 链创建成功。")
-            except FileNotFoundError as e:
+                    def wrap_normal_output(message: BaseMessage) -> Dict[str, Any]:
+                        return {"answer": message}
+
+                    base_chain = (
+                        self.normal_prompt | chat | RunnableLambda(wrap_normal_output)
+                    )
+                    context_display_name = "标准对话 (知识库错误)"  # 更新上下文
+            else:
+                # 如果 kb_data 获取失败，直接使用普通链
                 logging.warning(
-                    f"无法加载知识库 {knowledge_base_id} (可能不存在或无法访问): {e}。将退回到普通聊天模式。"
+                    f"由于无法获取知识库 {knowledge_base_id} 数据，将使用普通聊天模式。"
                 )
 
-                # RAG 出错，退回普通链，最后一步是 chat (LLM)，输出是 AIMessage
                 def wrap_normal_output(message: BaseMessage) -> Dict[str, Any]:
                     return {"answer": message}
 
                 base_chain = (
                     self.normal_prompt | chat | RunnableLambda(wrap_normal_output)
                 )
-                context_display_name = "标准对话 (知识库错误)"  # 更新上下文
-            except Exception as e:
-                logging.error(
-                    f"获取知识库检索器或创建 RAG 链时出错 ({knowledge_base_id}): {e}",
-                    exc_info=True,
-                )
+                # context_display_name 已在上面设置为错误状态
 
-                # RAG 出错，退回普通链
-                def wrap_normal_output(message: BaseMessage) -> Dict[str, Any]:
-                    return {"answer": message}
-
-                base_chain = (
-                    self.normal_prompt | chat | RunnableLambda(wrap_normal_output)
-                )
-                context_display_name = "标准对话 (知识库错误)"  # 更新上下文
-
-        else:
+        else:  # 不使用知识库的情况
             logging.info("不使用知识库，使用普通聊天模式。")
 
-            # 普通链，最后一步是 chat (LLM)，输出是 AIMessage
-            # 旧方式: base_chain = self.normal_prompt | chat
-            # 新方式: 包装输出为 {"answer": AIMessage(...)}，与 RAG 链统一
             def wrap_normal_output(message: BaseMessage) -> Dict[str, Any]:
                 return {"answer": message}
 
             base_chain = self.normal_prompt | chat | RunnableLambda(wrap_normal_output)
-            # context_display_name 已在上面设置，无需修改
+            # context_display_name 默认为 "标准对话"
 
         return context_display_name, base_chain
 

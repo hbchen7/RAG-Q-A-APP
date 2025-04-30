@@ -1,7 +1,7 @@
+import asyncio
 import logging  # 导入 logging
 import os
 import sys
-import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Dict
@@ -28,7 +28,9 @@ os.environ["LANGCHAIN_PROJECT"] = (
 )
 
 from src.config.Beanie import init_db
+from src.config.Redis import close_redis_pool, get_redis_client, init_redis_pool
 from src.models.user import User  # 导入 User 模型
+from src.service.knowledgeSev import load_all_knowledge_bases_to_cache
 from src.utils.agent_mcp import get_mcp_agent
 from src.utils.pwdHash import get_password_hash  # 导入密码哈希函数
 
@@ -40,7 +42,27 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 初始化数据库
+    logger.info("应用程序启动：正在初始化数据库...")
     await init_db()
+    logger.info("数据库初始化完成。")
+
+    # 初始化 Redis 连接池
+    logger.info("应用程序启动：正在初始化 Redis 连接池...")
+    await init_redis_pool()
+    logger.info("Redis 连接池初始化完成。")
+
+    # --- 修改：预加载知识库缓存 ---
+    # 使用 get_redis_client() 来检查和获取客户端
+    try:
+        client = get_redis_client()  # 尝试获取客户端，如果未初始化会抛出 RuntimeError
+        logger.info("Redis 客户端获取成功，正在预加载知识库缓存...")
+        await load_all_knowledge_bases_to_cache()
+        logger.info("知识库缓存预加载完成。")
+    except RuntimeError as e:
+        logger.warning(f"无法获取 Redis 客户端，跳过知识库缓存预加载: {e}")
+    except Exception as e:  # 捕获 load_all_knowledge_bases_to_cache 可能发生的其他错误
+        logger.error(f"预加载知识库缓存时发生错误: {e}", exc_info=True)
+    # --- 结束修改 ---
 
     # --- 添加: 首次启动时创建 root 用户 ---
     try:
@@ -63,6 +85,12 @@ async def lifespan(app: FastAPI):
     # --- 结束添加 ---
 
     yield
+
+    # 应用关闭时执行清理
+    logger.info("应用程序关闭：正在关闭 Redis 连接池...")
+    await close_redis_pool()
+    logger.info("Redis 连接池已关闭。")
+    logger.info("应用程序已成功关闭。")
 
 
 app = FastAPI(lifespan=lifespan)
