@@ -1,6 +1,7 @@
 # RAG-知识库问答系统
 
 本项目是一个基于 Langchain、FastAPI、Chroma 和 MongoDB 构建的 RAG (Retrieval-Augmented Generation) 知识库问答系统。
+![image.png](https://gitee.com/hbchen7/blog_image_hosting/raw/master/20250430153615287.png)
 
 ## 主要功能
 
