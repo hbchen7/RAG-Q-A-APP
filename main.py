@@ -1,6 +1,8 @@
 import logging  # 导入 logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Any, Dict
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -19,10 +21,15 @@ if app_env:
 
 # LANGCHAIN
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
-os.environ["LANGCHAIN_PROJECT"] = "test-2025.04.21"  # 自定义用例名称
+os.environ["LANGCHAIN_PROJECT"] = (
+    f"test-{datetime.now().strftime('%Y.%m.%d:%H')}"  # 自定义用例名称,使用当前日期:XX时
+)
 
 from src.config.Beanie import init_db
+from src.config.Redis import close_redis_pool, get_redis_client, init_redis_pool
 from src.models.user import User  # 导入 User 模型
+from src.service.knowledgeSev import load_all_knowledge_bases_to_cache
+from src.utils.agent_mcp import get_mcp_agent
 from src.utils.pwdHash import get_password_hash  # 导入密码哈希函数
 
 # 设置简单的日志记录
@@ -33,7 +40,27 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 初始化数据库
+    logger.info("应用程序启动：正在初始化数据库...")
     await init_db()
+    logger.info("数据库初始化完成。")
+
+    # 初始化 Redis 连接池
+    logger.info("应用程序启动：正在初始化 Redis 连接池...")
+    await init_redis_pool()
+    logger.info("Redis 连接池初始化完成。")
+
+    # --- 修改：预加载知识库缓存 ---
+    # 使用 get_redis_client() 来检查和获取客户端
+    try:
+        client = get_redis_client()  # 尝试获取客户端，如果未初始化会抛出 RuntimeError
+        logger.info("Redis 客户端获取成功，正在预加载知识库缓存...")
+        await load_all_knowledge_bases_to_cache()
+        logger.info("知识库缓存预加载完成。")
+    except RuntimeError as e:
+        logger.warning(f"无法获取 Redis 客户端，跳过知识库缓存预加载: {e}")
+    except Exception as e:  # 捕获 load_all_knowledge_bases_to_cache 可能发生的其他错误
+        logger.error(f"预加载知识库缓存时发生错误: {e}", exc_info=True)
+    # --- 结束修改 ---
 
     # --- 添加: 首次启动时创建 root 用户 ---
     try:
@@ -56,6 +83,12 @@ async def lifespan(app: FastAPI):
     # --- 结束添加 ---
 
     yield
+
+    # 应用关闭时执行清理
+    logger.info("应用程序关闭：正在关闭 Redis 连接池...")
+    await close_redis_pool()
+    logger.info("Redis 连接池已关闭。")
+    logger.info("应用程序已成功关闭。")
 
 
 app = FastAPI(lifespan=lifespan)
@@ -92,6 +125,25 @@ app.include_router(router=SessionRouter, prefix="/session", tags=["session"])
 app.include_router(router=AssistantRouter, prefix="/assistant", tags=["assistant"])
 
 
+@app.post("/query")
+async def query_mcp(user_input: str) -> Dict[str, Any]:
+    """
+    处理 MCP 查询请求
+
+    Args:
+        user_input (str): 用户的查询文本
+
+    Returns:
+        Dict[str, Any]: 包含查询响应的字典
+
+    Raises:
+        HTTPException: 当查询处理失败时抛出
+    """
+
+    response = await get_mcp_agent(user_input)
+    return {"response": response, "status": "success"}
+
+
 # 当访问路径为/ ，重定向路由到/docs
 @app.get("/")
 async def redirect_to_docs():
@@ -107,8 +159,31 @@ async def redirect_to_docs():
 # 启动web服务 ----------------------------------------------------------
 import uvicorn
 
+# # 如果启用 MCP
+# # --- 自定义服务器类 解决Windows上 FastAPI/Asyncio 子进程 `NotImplementedError`
+# class ProactorServer(uvicorn.Server):
+#     def run(self, sockets=None):
+#         # 在服务器运行前设置事件循环策略 (仅 Windows)
+#         if sys.platform == "win32":
+#             print("Setting ProactorEventLoopPolicy for Uvicorn server on Windows.")
+#             asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+#         # 使用 asyncio.run 启动服务器的 serve 方法
+#         asyncio.run(self.serve(sockets=sockets))
+
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))  # 默认端口设置为8080
     host = os.getenv("HOST", "127.0.0.1")  # 默认主机设置为127.0.0.1
     # uvicorn.run("main:app", host=host, port=port)
     uvicorn.run("main:app", host=host, port=port, reload=True)
+
+# 如果启用 MCP
+# # --- 修改服务器启动方式 ---
+# print(f"Starting MCP Agent server with ProactorServer at http://{host}:{port}")
+
+# # 1. 创建 Uvicorn 配置，确保 reload=False
+# config = uvicorn.Config(app="main:app", host=host, port=port, reload=False)
+
+# # 2. 实例化自定义服务器
+# server = ProactorServer(config=config)
+# server.run()

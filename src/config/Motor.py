@@ -20,3 +20,4 @@
 
 # # 创建全局实例
 # mongodb = MongoDB()
+

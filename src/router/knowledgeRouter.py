@@ -59,7 +59,7 @@ async def upload_file_to_knowledge_base(
             # embedding_supplier=embedding_supplier, # 移除
             # embedding_model=embedding_model, # 移除
             # embedding_api_key=embedding_api_key, # 移除
-            is_reorder=is_reorder,
+            # is_reorder=is_reorder,
         )
         return result
     except FileNotFoundError as e:

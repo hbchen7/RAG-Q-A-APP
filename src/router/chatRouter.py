@@ -1,10 +1,9 @@
 import json
 import logging
-from typing import Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 
 from src.models.knowledgeBase import KnowledgeBase
@@ -23,11 +22,31 @@ class LLMConfig(BaseModel):
     # max_length: Optional[int] = 10086
 
 
+class RerankerConfig(BaseModel):
+    """重排序器配置"""
+
+    use_reranker: bool = Field(default=False, description="是否启用重排序")
+    reranker_type: Literal["local", "remote"] = Field(
+        default="local",
+        description="重排序器类型: 'local' (本地CrossEncoder) 或 'remote' (SiliconFlow API)",
+    )
+    # 本地模型路径可以在 Knowledge 类中保持默认，或在这里覆盖（暂不提供覆盖）
+    remote_rerank_config: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="远程 Reranker (SiliconFlow) 配置，当 reranker_type='remote' 时需要。至少包含 'api_key' 和可选的 'model'。 例如: {'api_key': 'your_sf_key', 'model': 'BAAI/bge-reranker-v2-m3'}",
+    )
+    rerank_top_n: int = Field(default=3, ge=1, description="重排序后返回的文档数量")
+
+
 class KnowledgeConfig(BaseModel):
     knowledge_base_id: str
     filter_by_file_md5: Optional[str] = None
-    search_k: Optional[int] = Field(default=3, ge=1)
-    is_reorder: bool = False
+    search_k: Optional[int] = Field(
+        default=10, ge=1, description="基础检索器返回的文档数量 (应 >= rerank_top_n)"
+    )
+    reranker_config: RerankerConfig = Field(
+        default_factory=RerankerConfig, description="重排序器配置"
+    )
 
 
 class ChatConfig(BaseModel):
@@ -55,8 +74,18 @@ async def get_chat_service(request: ChatRequest) -> ChatSev:
                     kb.embedding_config.embedding_model,
                     kb.embedding_config.embedding_apikey,
                 )
+                reranker_cfg = request.knowledge_config.reranker_config
                 knowledge_instance = Knowledge(
-                    _embeddings=_embedding, reorder=request.knowledge_config.is_reorder
+                    _embeddings=_embedding,
+                    splitter="hybrid",
+                    use_reranker=reranker_cfg.use_reranker,
+                    reranker_type=reranker_cfg.reranker_type,
+                    remote_rerank_config=reranker_cfg.remote_rerank_config,
+                    rerank_top_n=reranker_cfg.rerank_top_n,
+                )
+            else:
+                logging.warning(
+                    f"未找到知识库 {request.knowledge_config.knowledge_base_id} 或其 embedding 配置。将不初始化 Knowledge 工具。"
                 )
         except Exception as e:
             logging.error(
@@ -120,7 +149,7 @@ async def stream_response_generator(chat_sev: ChatSev, request_data: ChatRequest
 @ChatRouter.post(
     "/stream",
     summary="AI Chat (Streaming)",
-    description="与 AI 进行流式对话，可选使用知识库。",
+    description="与 AI 进行流式对话，可选使用知识库和重排序。",
 )
 async def chat_stream_endpoint(
     request: ChatRequest, chat_sev: ChatSev = Depends(get_chat_service)
@@ -130,101 +159,103 @@ async def chat_stream_endpoint(
         f"接收到流式请求: session_id={request.session_id}, question='{request.question[:50]}...'"
     )
     if request.knowledge_config:
-        logging.info(f", kb_id={request.knowledge_config.knowledge_base_id}")
+        logging.info(
+            f", kb_id={request.knowledge_config.knowledge_base_id}, use_reranker={request.knowledge_config.reranker_config.use_reranker}, reranker_type='{request.knowledge_config.reranker_config.reranker_type}'"
+        )
     return StreamingResponse(
         stream_response_generator(chat_sev, request), media_type="text/event-stream"
     )
 
 
-@ChatRouter.post(
-    "/",
-    summary="AI Chat (Non-Streaming)",
-    description="(旧) 与 AI 进行对话，可选使用知识库。推荐使用 /stream 端点。",
-)
-async def chat_endpoint(
-    request: ChatRequest, chat_sev: ChatSev = Depends(get_chat_service)
-):
-    """
-    处理非流式聊天请求 (旧版，使用 invoke)。
-    """
-    logging.warning(
-        f"调用旧的非流式 /chat 端点 (session: {request.session_id})。建议迁移到 /stream。"
-    )
+# @ChatRouter.post(
+#     "/",
+#     summary="AI Chat (Non-Streaming)",
+#     description="(旧) 与 AI 进行对话，可选使用知识库和重排序。推荐使用 /stream 端点。",
+# )
+# async def chat_endpoint(
+#     request: ChatRequest, chat_sev: ChatSev = Depends(get_chat_service)
+# ):
+#     """
+#     处理非流式聊天请求 (旧版，使用 invoke)。
+#     """
+#     logging.warning(
+#         f"调用旧的非流式 /chat 端点 (session: {request.session_id})。建议迁移到 /stream。"
+#     )
 
-    knowledge_base_id_to_use = (
-        request.knowledge_config.knowledge_base_id if request.knowledge_config else None
-    )
-    filter_md5_to_use = (
-        request.knowledge_config.filter_by_file_md5
-        if request.knowledge_config
-        else None
-    )
-    search_k_to_use = (
-        request.knowledge_config.search_k if request.knowledge_config else 3
-    )
+#     knowledge_base_id_to_use = (
+#         request.knowledge_config.knowledge_base_id if request.knowledge_config else None
+#     )
+#     filter_md5_to_use = (
+#         request.knowledge_config.filter_by_file_md5
+#         if request.knowledge_config
+#         else None
+#     )
+#     search_k_to_use = (
+#         request.knowledge_config.search_k if request.knowledge_config else 3
+#     )
 
-    try:
-        response = await chat_sev.invoke(
-            question=request.question,
-            session_id=request.session_id,
-            api_key=request.llm_config.api_key,
-            supplier=request.llm_config.supplier,
-            model=request.llm_config.model,
-            temperature=request.llm_config.temperature,
-            max_length=None,
-            knowledge_base_id=knowledge_base_id_to_use,
-            filter_by_file_md5=filter_md5_to_use,
-            search_k=search_k_to_use,
-        )
+#     try:
+#         response = await chat_sev.invoke(
+#             question=request.question,
+#             session_id=request.session_id,
+#             api_key=request.llm_config.api_key,
+#             supplier=request.llm_config.supplier,
+#             model=request.llm_config.model,
+#             temperature=request.llm_config.temperature,
+#             max_length=None,
+#             knowledge_base_id=knowledge_base_id_to_use,
+#             filter_by_file_md5=filter_md5_to_use,
+#             search_k=search_k_to_use,
+#         )
 
-        if "error" in response:
-            logging.error(
-                f"聊天服务 invoke 返回错误 (session: {request.session_id}): {response['error']}"
-            )
-            raise HTTPException(
-                status_code=500, detail=response.get("error", "聊天处理失败")
-            )
+#         if "error" in response:
+#             logging.error(
+#                 f"聊天服务 invoke 返回错误 (session: {request.session_id}): {response['error']}"
+#             )
+#             raise HTTPException(
+#                 status_code=500, detail=response.get("error", "聊天处理失败")
+#             )
 
-        api_response = {}
-        if "answer" in response:
-            api_response["answer"] = response["answer"]
-        else:
-            logging.warning(f"聊天服务响应字典中缺少 'answer' 键: {response}")
-            raise HTTPException(status_code=500, detail="聊天服务未能生成答案")
+#         api_response = {}
+#         if "answer" in response:
+#             api_response["answer"] = response["answer"]
+#         else:
+#             logging.warning(f"聊天服务响应字典中缺少 'answer' 键: {response}")
+#             raise HTTPException(status_code=500, detail="聊天服务未能生成答案")
 
-        if "context" in response and isinstance(response["context"], list):
-            processed_context = []
-            for doc in response["context"]:
-                if isinstance(doc, Document):
-                    processed_context.append(
-                        {"page_content": doc.page_content, "metadata": doc.metadata}
-                    )
-                elif (
-                    isinstance(doc, dict)
-                    and "page_content" in doc
-                    and "metadata" in doc
-                ):
-                    processed_context.append(
-                        {
-                            "page_content": doc["page_content"],
-                            "metadata": doc["metadata"],
-                        }
-                    )
-                else:
-                    logging.warning(f"context 列表中包含非预期对象: {type(doc)}")
-            if processed_context:
-                api_response["context"] = processed_context
+#         if "context" in response and isinstance(response["context"], list):
+#             processed_context = []
+#             for doc in response["context"]:
+#                 if isinstance(doc, Document):
+#                     processed_context.append(
+#                         {"page_content": doc.page_content, "metadata": doc.metadata}
+#                     )
+#                 elif (
+#                     isinstance(doc, dict)
+#                     and "page_content" in doc
+#                     and "metadata" in doc
+#                 ):
+#                     processed_context.append(
+#                         {
+#                             "page_content": doc["page_content"],
+#                             "metadata": doc["metadata"],
+#                         }
+#                     )
+#                 else:
+#                     logging.warning(f"context 列表中包含非预期对象: {type(doc)}")
+#             if processed_context:
+#                 api_response["context"] = processed_context
 
-        if "context_display_name" in response:
-            api_response["context_display_name"] = response["context_display_name"]
+#         if "context_display_name" in response:
+#             api_response["context_display_name"] = response["context_display_name"]
 
-        return api_response
+#         return api_response
 
-    except HTTPException as http_exc:
-        raise http_exc
-    except Exception as e:
-        logging.error(
-            f"错误：调用非流式聊天服务时出错 (session: {request.session_id}): {e}",
-            exc_info=True,
-        )
-        raise HTTPException(status_code=500, detail=f"聊天处理失败: {e}")
+#     except HTTPException as http_exc:
+#         raise http_exc
+#     except Exception as e:
+#         logging.error(
+#             f"错误：调用非流式聊天服务时出错 (session: {request.session_id}): {e}",
+#             exc_info=True,
+#         )
+#         raise HTTPException(status_code=500, detail=f"聊天处理失败: {e}")

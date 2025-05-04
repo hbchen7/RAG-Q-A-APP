@@ -1,4 +1,5 @@
 doc/
+test/
 .cursor/
 .cursorrules
 .cursorindexingignore
@@ -8,6 +9,7 @@ doc/
 compose.yml
 # chroma
 chroma/
+src/utils/bge-reranker-large
 
 # Byte-compiled / optimized / DLL files
 __pycache__
