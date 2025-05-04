@@ -59,7 +59,7 @@ class DocumentChunker(BaseLoader):
     # 文件类型对应的默认分割策略
     default_splitting_strategy = {
         FileType.CSV: "recursive",  # CSV 文件使用递归分割
-        FileType.TXT: "hybrid",  # 文本文件使用混合分割
+        FileType.TXT: "recursive",  # 文本文件使用递归分割
         FileType.DOC: "recursive",  # Word 文档使用递归分割
         FileType.DOCX: "recursive",  # Word 文档使用递归分割
         FileType.PDF: "recursive",  # PDF 文件使用递归分割
@@ -84,24 +84,55 @@ class DocumentChunker(BaseLoader):
         :param embeddings: 嵌入模型（对semantic和hybrid模式有效）
         """
         self.file_path = file_path
-        self.file_type_ = detect_filetype(file_path)
+        try:  # 添加 try-except 块来处理 detect_filetype 可能的错误
+            self.file_type_ = detect_filetype(file_path)
+        except Exception as e:
+            print(f"警告: 检测文件类型时出错 '{file_path}': {e}. 默认使用 TXT 类型。")
+            self.file_type_ = FileType.TXT  # 发生错误时回退到 TXT 类型
+
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
-        self.splitter_type = splitter_type
         self.embeddings = embeddings
 
         if self.file_type_ not in self.allow_file_type:
-            raise ValueError(f"不支持的文件类型: {self.file_type_}")
-
-        loader_class, params = self.allow_file_type[self.file_type_]
-        self.loader: BaseLoader = loader_class(file_path, **params)
+            # 对于未明确支持的类型，可以考虑默认使用 TextLoader 或抛出错误
+            print(
+                f"警告: 文件类型 {self.file_type_} 未在 allow_file_type 中明确定义。将尝试使用 TextLoader。"
+            )
+            self.allow_file_type[self.file_type_] = (
+                TextLoader,
+                {"autodetect_encoding": True, "encoding": "utf-8"},
+            )
+            # raise ValueError(f"不支持的文件类型: {self.file_type_}") # 或者选择抛出错误
 
         # 如果使用 hybrid 模式，根据文件类型选择合适的分割策略
+        effective_splitter_type = splitter_type
         if splitter_type == "hybrid":
-            self.splitter_type = self.default_splitting_strategy[self.file_type_]
+            effective_splitter_type = self.default_splitting_strategy.get(
+                self.file_type_, "recursive"
+            )  # 提供默认值 'recursive'
             print(
-                f"使用文件类型 {self.file_type_} 的默认分割策略: {self.splitter_type}"
+                f"使用文件类型 {self.file_type_} 的默认分割策略: {effective_splitter_type}"
             )
+        self.splitter_type = effective_splitter_type  # 现在设置最终的 splitter_type
+
+        # 初始化加载器 - 先根据文件类型获取默认加载器
+        loader_class, params = self.allow_file_type[self.file_type_]
+        self.loader: BaseLoader = loader_class(self.file_path, **params)
+
+        # --- 开始修改 ---
+        # 特殊处理：如果文件是Markdown且使用markdown分割策略，则强制使用TextLoader
+        if self.file_type_ == FileType.MD and self.splitter_type == "markdown":
+            print(
+                "检测到 Markdown 文件和 markdown 分割策略，切换到 TextLoader 以保留原始标题进行分割。"
+            )
+            # 获取 TextLoader 的参数，如果 TXT 未定义则提供默认值
+            text_loader_class, text_loader_params = self.allow_file_type.get(
+                FileType.TXT,
+                (TextLoader, {"autodetect_encoding": True, "encoding": "utf-8"}),
+            )
+            self.loader = text_loader_class(self.file_path, **text_loader_params)
+        # --- 结束修改 ---
 
         # 初始化分割器
         self._init_splitter()
@@ -114,12 +145,14 @@ class DocumentChunker(BaseLoader):
             self._init_markdown_splitter()
         elif self.splitter_type == "markdown" and self.file_type_ != FileType.MD:
             print(
-                f"警告：markdown 分割策略仅适用于 Markdown 文件，当前文件类型为 {self.file_type_}。"
+                f"警告：markdown 分割策略通常与 Markdown 文件配合使用 TextLoader 效果最佳，当前文件类型为 {self.file_type_}。"
             )
+            # 这里可以选择是强制切换到 recursive，还是继续尝试（取决于加载器是否保留了结构）
+            # 为了安全起见，如果不是MD文件却选了markdown策略，切换回recursive似乎更稳妥
             print("自动切换为 recursive 分割策略。")
-            self.splitter_type = "recursive"
+            self.splitter_type = "recursive"  # 更新实例的 splitter_type
             self._init_recursive_splitter()
-        else:  # default to recursive
+        else:  # default to recursive or handle other cases
             self._init_recursive_splitter()
 
     def _init_semantic_splitter(self) -> None:
@@ -173,36 +206,53 @@ class DocumentChunker(BaseLoader):
         try:
             # 首先加载文档
             initial_docs = self.loader.load()
+            if not initial_docs:
+                print(f"警告：加载器未能从 {self.file_path} 加载任何文档。")
+                return []  # 如果加载器没有返回任何文档，则提前返回空列表
 
-            # 如果是 Markdown 文件且使用 markdown 分割策略
+            # 如果是 Markdown 文件且使用 markdown 分割策略 (此时 loader 必然是 TextLoader)
             if self.file_type_ == FileType.MD and self.splitter_type == "markdown":
-                # 将文档内容合并成一个字符串
-                text = "\n\n".join(doc.page_content for doc in initial_docs)
-                # 使用 Markdown 分割器分割文本
-                splits = self.text_splitter.split_text(text)
-                # 转换为 Document 对象
+                # --- 开始修改 ---
+                # TextLoader 通常将整个文件加载到第一个文档的 page_content 中
+                text = initial_docs[0].page_content
+                # 使用 MarkdownHeaderTextSplitter 分割文本，它返回 Document 列表
+                # 每个返回的 Document 包含 page_content 和与该块相关的 header metadata
+                splits: List[Document] = self.text_splitter.split_text(text)
+
+                # 准备基础元数据（来自加载器，主要是文件路径等）
+                base_metadata = (
+                    initial_docs[0].metadata.copy()
+                    if initial_docs and initial_docs[0].metadata
+                    else {}
+                )
+
                 final_docs = []
-                for split in splits:
-                    metadata = initial_docs[0].metadata.copy()
-                    metadata.update(split.metadata)  # 合并 markdown 分割产生的元数据
+                for split_doc in splits:
+                    # 创建新的元数据字典，先复制基础元数据
+                    combined_metadata = base_metadata.copy()
+                    # 然后更新（或添加）由 MarkdownHeaderTextSplitter 生成的特定于块的元数据（如标题）
+                    combined_metadata.update(split_doc.metadata)
+                    # 创建最终的 Document 对象
                     final_docs.append(
-                        Document(page_content=split.page_content, metadata=metadata)
+                        Document(
+                            page_content=split_doc.page_content,
+                            metadata=combined_metadata,
+                        )
                     )
+                # --- 结束修改 ---
                 print(f"Markdown 文档分割完成，共生成 {len(final_docs)} 个块。")
                 return final_docs
             else:
-                # 对于其他文件类型，使用标准的 split_documents 方法
                 final_docs = self.text_splitter.split_documents(initial_docs)
                 print(f"文档分割完成，共生成 {len(final_docs)} 个块。")
                 return final_docs
 
         except Exception as e:
-            print(f"使用 '{self.splitter_type}' 分割器处理文档时出错: {e}")
-            if self.splitter_type == "semantic" and "bert_score" in str(e).lower():
-                print(
-                    "提示：SemanticChunker 可能需要 'bert_score' 库。请尝试安装：'pdm add bert_score'"
-                )
-            raise
+            print(
+                f"使用 '{self.splitter_type}' 分割器处理文档 '{self.file_path}' 时出错: {e}"
+            )
+
+            return []  # 或者返回空列表表示处理失败但程序继续
 
 
 # if __name__ == "__main__":

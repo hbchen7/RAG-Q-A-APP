@@ -348,14 +348,14 @@ class ChatSev:
                 self.get_session_chat_history,  # f-历史会话-获取会话历史-MongoDBChatMessageHistory
                 input_messages_key="input",  # base_chain 需要 'input'
                 history_messages_key="chat_history",  # prompt 需要 'chat_history'
-                output_messages_key="answer",  # 新增：指定从 base_chain 输出字典中提取 'answer' 作为 AI 消息保存
+                output_messages_key="answer",  # 指定从 base_chain 输出字典中提取 'answer' 作为 AI 消息保存
                 history_factory_config=[
                     ConfigurableFieldSpec(
                         id="session_id",
                         annotation=str,
                         name="Session ID",
                         description="Unique identifier for the chat session.",
-                        default="",  # 移除默认值，强制要求提供
+                        default="",
                         is_shared=True,
                     )
                 ],

@@ -164,9 +164,10 @@ class Knowledge:
         self,
         _embeddings=None,
         splitter="hybrid",
+        # splitter="semantic",
         # --- 重排序相关配置 ---
         use_reranker: bool = False,  # 是否启用重排序，替代旧的 reorder
-        reranker_type: Literal["local", "remote"] = "local",  # 重排序器类型
+        reranker_type: Literal["local", "remote"] = "remote",  # 重排序器类型
         local_rerank_model_path: str = DEFAULT_LOCAL_RERANK_MODEL,  # 本地模型路径
         remote_rerank_config: Optional[Dict[str, Any]] = None,  # 远程配置字典
         rerank_top_n: int = 3,  # 返回的文档数量

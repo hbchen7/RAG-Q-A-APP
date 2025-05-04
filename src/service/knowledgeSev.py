@@ -115,7 +115,7 @@ async def create_knowledge(knowledge_base_data, current_user) -> KnowledgeBaseMo
 async def process_uploaded_file(
     kb_id: str,
     file: UploadFile,
-    is_reorder: bool,
+    # is_reorder: bool,
 ) -> dict:
     """处理上传的文件，进行向量化并更新知识库记录和 Redis 缓存"""
 
@@ -177,7 +177,7 @@ async def process_uploaded_file(
             config.embedding_model,
             config.embedding_apikey,  # 使用配置中的 API Key
         )
-        knowledge_util = Knowledge(_embeddings=_embedding, reorder=is_reorder)
+        knowledge_util = Knowledge(_embeddings=_embedding)
 
         # 6. 调用 Knowledge 类处理文件并存入 Chroma
         await knowledge_util.add_file_to_knowledge_base(

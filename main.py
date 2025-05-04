@@ -1,7 +1,5 @@
-import asyncio
 import logging  # 导入 logging
 import os
-import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Dict
@@ -161,30 +159,31 @@ async def redirect_to_docs():
 # 启动web服务 ----------------------------------------------------------
 import uvicorn
 
-
-# --- 自定义服务器类 解决Windows上 FastAPI/Asyncio 子进程 `NotImplementedError`
-class ProactorServer(uvicorn.Server):
-    def run(self, sockets=None):
-        # 在服务器运行前设置事件循环策略 (仅 Windows)
-        if sys.platform == "win32":
-            print("Setting ProactorEventLoopPolicy for Uvicorn server on Windows.")
-            asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-        # 使用 asyncio.run 启动服务器的 serve 方法
-        asyncio.run(self.serve(sockets=sockets))
+# # 如果启用 MCP
+# # --- 自定义服务器类 解决Windows上 FastAPI/Asyncio 子进程 `NotImplementedError`
+# class ProactorServer(uvicorn.Server):
+#     def run(self, sockets=None):
+#         # 在服务器运行前设置事件循环策略 (仅 Windows)
+#         if sys.platform == "win32":
+#             print("Setting ProactorEventLoopPolicy for Uvicorn server on Windows.")
+#             asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+#         # 使用 asyncio.run 启动服务器的 serve 方法
+#         asyncio.run(self.serve(sockets=sockets))
 
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))  # 默认端口设置为8080
     host = os.getenv("HOST", "127.0.0.1")  # 默认主机设置为127.0.0.1
     # uvicorn.run("main:app", host=host, port=port)
-    # uvicorn.run("main:app", host=host, port=port, reload=True)
+    uvicorn.run("main:app", host=host, port=port, reload=True)
 
-    # --- 修改服务器启动方式 ---
-    print(f"Starting MCP Agent server with ProactorServer at http://{host}:{port}")
+# 如果启用 MCP
+# # --- 修改服务器启动方式 ---
+# print(f"Starting MCP Agent server with ProactorServer at http://{host}:{port}")
 
-    # 1. 创建 Uvicorn 配置，确保 reload=False
-    config = uvicorn.Config(app="main:app", host=host, port=port, reload=False)
+# # 1. 创建 Uvicorn 配置，确保 reload=False
+# config = uvicorn.Config(app="main:app", host=host, port=port, reload=False)
 
-    # 2. 实例化自定义服务器
-    server = ProactorServer(config=config)
-    server.run()
+# # 2. 实例化自定义服务器
+# server = ProactorServer(config=config)
+# server.run()
