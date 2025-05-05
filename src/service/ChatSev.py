@@ -88,8 +88,8 @@ class ChatSev:
 
         # 知识库prompt--system
         knowledge_system_prompt = (
-            f"{ai_info} 【注意：当用户向你提问，请你使用下面检索到的上下文来回答问题。如果检索到的上下文中没有问题的答案，请你直接回答不知道。检索到的上下文如下：\n\n"
-            "{context}】"
+            f"{ai_info} 【注意：当用户向你提问，请你使用下面检索到的上下文来回答问题。如果检索到的上下文中没有问题的答案，请你回答:'根据检索到的上下文，我无法准确回答这个问题'。检索到的上下文如下：\n\n"
+            "{context}"
         )
 
         self.knowledge_prompt = ChatPromptTemplate.from_messages(  # 知识库prompt
@@ -241,7 +241,7 @@ class ChatSev:
                     filter_dict = {"source_file_md5": str(filter_by_file_md5)}
 
                 try:
-                    retriever = self.knowledge.get_retriever_for_knowledge_base(
+                    retriever = await self.knowledge.get_retriever_for_knowledge_base(
                         kb_id=knowledge_base_id,
                         filter_dict=filter_dict,
                         search_k=search_k,

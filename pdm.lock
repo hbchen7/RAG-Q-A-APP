@@ -5,7 +5,7 @@
 groups = ["default", "dev"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:bcb8718dee38647682faa9e796379bc918c1187879ece3a3a4249795adb59840"
+content_hash = "sha256:02c7bfb1a5b5bd4db8e3bf191031ffc3b6fff3a5fd72ad2de223a25cf71f7cc2"
 
 [[metadata.targets]]
 requires_python = ">=3.10"
@@ -4469,6 +4469,19 @@ files = [
     {file = "pyzmq-26.4.0-pp311-pypy311_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:7731abd23a782851426d4e37deb2057bf9410848a4459b5ede4fe89342e687a9"},
     {file = "pyzmq-26.4.0-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:a222ad02fbe80166b0526c038776e8042cd4e5f0dec1489a006a1df47e9040e0"},
     {file = "pyzmq-26.4.0.tar.gz", hash = "sha256:4bd13f85f80962f91a651a7356fe0472791a5f7a92f227822b5acf44795c626d"},
+]
+
+[[package]]
+name = "rank-bm25"
+version = "0.2.2"
+summary = "Various BM25 algorithms for document ranking"
+groups = ["default"]
+dependencies = [
+    "numpy",
+]
+files = [
+    {file = "rank_bm25-0.2.2-py3-none-any.whl", hash = "sha256:7bd4a95571adadfc271746fa146a4bcfd89c0cf731e49c3d1ad863290adbe8ae"},
+    {file = "rank_bm25-0.2.2.tar.gz", hash = "sha256:096ccef76f8188563419aaf384a02f0ea459503fdf77901378d4fd9d87e5e51d"},
 ]
 
 [[package]]

@@ -1,12 +1,16 @@
 import logging  # 添加日志记录
 import os
 from hashlib import md5
-from typing import Any, Dict, Literal, Optional, Sequence  # 更新 typing
+from typing import Any, Dict, List, Literal, Optional, Sequence  # 更新 typing
 
-from langchain.retrievers import ContextualCompressionRetriever
+from langchain.retrievers import (
+    ContextualCompressionRetriever,
+    EnsembleRetriever,
+)
 from langchain.retrievers.document_compressors import CrossEncoderReranker
 from langchain_chroma import Chroma
 from langchain_community.cross_encoders import HuggingFaceCrossEncoder
+from langchain_community.retrievers import BM25Retriever
 from langchain_core.callbacks import Callbacks  # Callbacks for compressor
 from langchain_core.documents import (
     BaseDocumentCompressor,  # 导入基类
@@ -165,6 +169,9 @@ class Knowledge:
         _embeddings=None,
         splitter="hybrid",
         # splitter="semantic",
+        # --- BM25 相关配置 ---
+        use_bm25: bool = False,  # 是否启用 BM25 混合检索
+        bm25_k: int = 3,  # BM25 检索器返回的文档数量
         # --- 重排序相关配置 ---
         use_reranker: bool = False,  # 是否启用重排序，替代旧的 reorder
         reranker_type: Literal["local", "remote"] = "remote",  # 重排序器类型
@@ -176,6 +183,10 @@ class Knowledge:
         self.splitter = splitter
         if not self._embeddings:
             logger.warning("Knowledge 类在没有提供 embedding 函数的情况下初始化。")
+
+        # --- 存储 BM25 配置 ---
+        self.use_bm25 = use_bm25
+        self.bm25_k = bm25_k
 
         # --- 存储重排序配置 ---
         self.use_reranker = use_reranker
@@ -195,7 +206,8 @@ class Knowledge:
         self.rerank_top_n = rerank_top_n
 
         logger.info(
-            f"Knowledge 初始化: Reranker={'启用' if use_reranker else '禁用'}, 类型={reranker_type if use_reranker else 'N/A'}, TopN={rerank_top_n if use_reranker else 'N/A'}"
+            f"Knowledge 初始化: BM25={'启用' if use_bm25 else '禁用'}, BM25_k={bm25_k if use_bm25 else 'N/A'}, "
+            f"Reranker={'启用' if use_reranker else '禁用'}, Type={reranker_type if use_reranker else 'N/A'}, TopN={rerank_top_n if use_reranker else 'N/A'}"
         )
 
     @staticmethod
@@ -323,29 +335,45 @@ class Knowledge:
             )
             raise
 
-    def get_retriever_for_knowledge_base(
+    async def get_retriever_for_knowledge_base(
         self, kb_id: str, filter_dict: Optional[dict] = None, search_k: int = 3
     ) -> BaseRetriever:
         """
-        根据知识库ID (kb_id) 获取检索器，支持可选的元数据过滤和重排序。
+        异步根据知识库ID (kb_id) 获取检索器。
+        支持可选的元数据过滤、BM25混合检索和重排序。
+
         :param kb_id: 知识库ID，即 Chroma 集合名称。
-        :param filter_dict: 用于元数据过滤的字典。
-        :param search_k: 基础检索器返回的文档数量 (传递给 vectorstore.as_retriever)。
-                         注意：这个 k 值应该大于或等于 rerank_top_n。
-                         如果 k 小于 rerank_top_n， reranker 最多只能返回 k 个结果。
-                         建议设置 search_k 为 rerank_top_n 的 2-5 倍以获得更好的重排效果。
-        :return: 配置好的 Langchain BaseRetriever (可能是原始的，也可能是 ContextualCompressionRetriever)。
+        :param filter_dict: 用于元数据过滤的字典 (例如 {"source_file_md5": "..."})。
+        :param search_k: 向量检索器返回的文档数量。
+        :return: 配置好的 Langchain BaseRetriever。
         """
         kb_id_str = str(kb_id)
         logger.info(
-            f"准备为知识库 '{kb_id_str}' 获取检索器... Reranker: {'启用' if self.use_reranker else '禁用'}, Type: {self.reranker_type if self.use_reranker else 'N/A'}"
+            f"开始为知识库 '{kb_id_str}' 获取检索器... "
+            f"BM25: {'启用' if self.use_bm25 else '禁用'} (k={self.bm25_k}), "
+            f"Reranker: {'启用' if self.use_reranker else '禁用'} (Type: {self.reranker_type}, TopN: {self.rerank_top_n})"
         )
 
-        # 调整 search_k 以确保 reranker 有足够文档处理
+        if not self.is_already_vector_database(kb_id_str):
+            error_msg = f"知识库集合 '{kb_id_str}' 的物理存储 (在 {chroma_dir}) 不存在或无法访问！"
+            logger.error(error_msg)
+            raise FileNotFoundError(error_msg)
+
+        # --- 1. 加载 Chroma Vector Store ---
+        logger.info(f"加载知识库 '{kb_id_str}'...")
+        try:
+            vectorstore = self.load_knowledge(kb_id_str)
+        except Exception as e:
+            error_msg = f"加载知识库 '{kb_id_str}' 时出错: {e}"
+            logger.error(error_msg, exc_info=True)
+            raise RuntimeError(error_msg) from e
+
+        # --- 2. 初始化基础向量检索器 (base_retriever) ---
         effective_search_k = search_k
         if self.use_reranker and search_k < self.rerank_top_n:
             logger.warning(
-                f"配置的 search_k ({search_k}) 小于 rerank_top_n ({self.rerank_top_n})。将增加 search_k 到 {self.rerank_top_n}。建议设置更大的 search_k。"
+                f"配置的 search_k ({search_k}) 小于 rerank_top_n ({self.rerank_top_n})。将增加 search_k 到 {self.rerank_top_n}。"
+                f"建议设置更大的 search_k (如 {self.rerank_top_n * 2}-{self.rerank_top_n * 5}) 以获得更好的重排效果。"
             )
             effective_search_k = self.rerank_top_n
         elif self.use_reranker and search_k < self.rerank_top_n * 2:
@@ -353,125 +381,201 @@ class Knowledge:
                 f"search_k ({search_k}) 略小于 rerank_top_n ({self.rerank_top_n}) 的推荐倍数。考虑增加 search_k 以获得更好的重排效果。"
             )
 
-        search_kwargs = {"k": effective_search_k}  # 使用调整后的 k
+        vector_search_kwargs = {"k": effective_search_k}
         if filter_dict:
-            search_kwargs["filter"] = filter_dict
-            logger.info(f"应用元数据过滤器: {filter_dict}")
+            vector_search_kwargs["filter"] = filter_dict
+            logger.info(f"向量检索器应用元数据过滤器: {filter_dict}")
         else:
-            logger.info("不应用元数据过滤器")
+            logger.info("向量检索器不应用元数据过滤器")
 
-        if not self.is_already_vector_database(kb_id_str):
-            error_msg = f"知识库集合 '{kb_id_str}' 的物理存储 (在 {chroma_dir}) 不存在或无法访问！"
-            logger.error(error_msg)
-            raise FileNotFoundError(error_msg)
+        base_retriever = vectorstore.as_retriever(search_kwargs=vector_search_kwargs)
+        logger.info(f"基础向量检索器 (Chroma) 配置: {vector_search_kwargs}")
 
-        logger.info(f"加载知识库 '{kb_id_str}'...")
-        try:
-            vectorstore = self.load_knowledge(kb_id_str)
-            logger.info(f"将知识库 '{kb_id_str}' 作为基础检索器，配置: {search_kwargs}")
-            base_retriever = vectorstore.as_retriever(search_kwargs=search_kwargs)
-
-            # --- 根据配置应用重排序 ---
-            if self.use_reranker:
+        # --- 3. 初始化 BM25 检索器 (如果启用) ---
+        bm25_retriever: Optional[BM25Retriever] = None
+        if self.use_bm25:
+            logger.info("BM25 混合检索已启用，正在准备 BM25 检索器...")
+            try:
+                # 使用 aget 获取文档内容和元数据
+                # 注意: where 参数用于元数据过滤，我们传入 filter_dict
                 logger.info(
-                    f"启用重排序 (类型: {self.reranker_type}, TopN: {self.rerank_top_n})..."
+                    f"使用 aget 从 Chroma 集合 '{kb_id_str}' 获取文档以初始化 BM25..."
                 )
-                compressor: Optional[BaseDocumentCompressor] = None
+                logger.info(
+                    f"aget 的 where 过滤器: {filter_dict}"
+                )  # filter_dict 可能为 None
+                chroma_get_result = (
+                    vectorstore.get(  # 只有get同步方法——考虑后续使用mongodb
+                        where=filter_dict,  # 直接使用 filter_dict 进行元数据过滤
+                        include=["documents", "metadatas"],  # 只获取需要的内容
+                    )
+                )
 
-                if self.reranker_type == "local":
-                    # --- 使用本地 CrossEncoder Reranker ---
-                    try:
+                # 检查返回结果
+                if not chroma_get_result or not chroma_get_result.get("documents"):
+                    logger.warning(
+                        f"从 Chroma 集合 '{kb_id_str}' 未获取到任何文档 (可能集合为空或过滤条件严格)。无法创建 BM25 检索器。"
+                    )
+                else:
+                    # 将 Chroma 返回结果转换为 Langchain Document 列表
+                    all_docs_from_chroma: List[Document] = []
+                    doc_contents = chroma_get_result.get("documents", [])
+                    metadatas = chroma_get_result.get("metadatas", [])
+                    ids = chroma_get_result.get("ids", [])  # 获取 ids 以备将来可能使用
+
+                    # 确保内容和元数据列表长度一致 (理论上 Chroma 会保证)
+                    if len(doc_contents) == len(metadatas):
+                        for content, meta in zip(doc_contents, metadatas):
+                            # 创建 Document 对象，meta 可能为 None
+                            all_docs_from_chroma.append(
+                                Document(
+                                    page_content=content, metadata=meta if meta else {}
+                                )
+                            )
                         logger.info(
-                            f"加载本地重排序模型: {self.local_rerank_model_path}"
+                            f"成功从 Chroma 获取 {len(all_docs_from_chroma)} 个文档用于 BM25。"
                         )
-                        # 确保 rerank_model 路径正确且模型存在
-                        model_kwargs = {"device": "cpu"}  # 默认 CPU，可按需修改
-                        # import torch
-                        # if torch.cuda.is_available(): model_kwargs = {"device": "cuda"}
 
-                        encoder_model = HuggingFaceCrossEncoder(
-                            model_name=self.local_rerank_model_path,
-                            model_kwargs=model_kwargs,
+                        # 初始化 BM25Retriever
+                        bm25_retriever = BM25Retriever.from_documents(
+                            all_docs_from_chroma
                         )
-                        compressor = CrossEncoderReranker(
-                            model=encoder_model, top_n=self.rerank_top_n
-                        )
-                        logger.info("本地 CrossEncoderReranker 初始化成功。")
-                    except Exception as e:
+                        bm25_retriever.k = self.bm25_k  # 设置 BM25 返回数量
+                        logger.info(f"BM25 检索器初始化成功，k={self.bm25_k}。")
+                    else:
                         logger.error(
-                            f"加载或初始化本地重排序模型 '{self.local_rerank_model_path}' 时出错: {e}",
-                            exc_info=True,
+                            f"从 Chroma get 返回的 documents ({len(doc_contents)}) 和 metadatas ({len(metadatas)}) 数量不匹配！无法创建 BM25 检索器。"
                         )
-                        # 出错则不使用重排序
-                        self.use_reranker = False  # 禁用重排序以避免后续错误
-                        return base_retriever  # 返回基础检索器
 
+            except Exception as e:
+                logger.error(
+                    f"从 Chroma 获取文档或初始化 BM25 检索器时出错: {e}", exc_info=True
+                )
+                # 出错时，bm25_retriever 保持为 None，后续逻辑将只使用向量检索
+
+        # --- 4. 确定最终检索器 ---
+        final_retriever: BaseRetriever
+
+        if self.use_reranker:
+            # --- 场景 A: 使用重排序 ---
+            logger.info(
+                f"启用重排序 (类型: {self.reranker_type}, TopN: {self.rerank_top_n})，正在配置 ContextualCompressionRetriever..."
+            )
+            compressor: Optional[BaseDocumentCompressor] = None
+            # ... (现有创建 compressor 的逻辑不变，基于 self.reranker_type) ...
+            try:
+                if self.reranker_type == "local":
+                    # ... (加载本地 reranker) ...
+                    encoder_model = HuggingFaceCrossEncoder(
+                        model_name=self.local_rerank_model_path,
+                        model_kwargs={"device": "cpu"},
+                    )  # 示例
+                    compressor = CrossEncoderReranker(
+                        model=encoder_model, top_n=self.rerank_top_n
+                    )
+                    logger.info("本地 CrossEncoderReranker 初始化成功。")
                 elif self.reranker_type == "remote":
-                    # --- 使用远程 SiliconFlow Reranker ---
+                    # ... (加载远程 reranker) ...
                     if self.remote_rerank_config and self.remote_rerank_config.get(
                         "api_key"
                     ):
-                        api_key = self.remote_rerank_config["api_key"]
-                        # remote_rerank_config 可能包含 'model'，也可能不包含
-                        # RemoteRerankerCompressor 会处理默认值
-                        try:
-                            # 使用关键字参数初始化，Pydantic 会根据类属性进行匹配
-                            compressor = RemoteRerankerCompressor(
-                                api_key=api_key,
-                                # 如果提供了 model，则使用它，否则使用类定义的默认值
-                                model_name=self.remote_rerank_config.get(
-                                    "model", DEFAULT_REMOTE_RERANK_MODEL
-                                ),
-                                top_n=self.rerank_top_n,
-                            )
-                            logger.info("远程 RemoteRerankerCompressor 初始化成功。")
-                        # except ValueError as e: # 这个 ValueError 是我们之前在 __init__ 里加的，现在不需要了
-                        #    logger.error(f"初始化 RemoteRerankerCompressor 时出错: {e}")
-                        #    self.use_reranker = False
-                        #    return base_retriever
-                        except Exception as e:
-                            # 捕获 Pydantic 初始化可能发生的其他错误 (例如类型不匹配)
-                            logger.error(
-                                f"初始化 RemoteRerankerCompressor 时发生 Pydantic 或其他错误: {e}",
-                                exc_info=True,
-                            )
-                            self.use_reranker = False
-                            return base_retriever
-                    else:
-                        logger.error(
-                            "无法使用远程 Reranker，因为 'remote_rerank_config' 或 'api_key' 未提供。"
+                        compressor = RemoteRerankerCompressor(
+                            api_key=self.remote_rerank_config["api_key"],
+                            model_name=self.remote_rerank_config.get(
+                                "model", DEFAULT_REMOTE_RERANK_MODEL
+                            ),
+                            top_n=self.rerank_top_n,
                         )
-                        self.use_reranker = False  # 禁用重排序
-                        return base_retriever  # 返回基础检索器
+                        logger.info("远程 RemoteRerankerCompressor 初始化成功。")
+                    else:
+                        logger.error("无法初始化远程 Reranker: 缺少 API Key。")
+                        # 这里 compressor 会是 None
+
+                # 如果 compressor 创建失败，打印警告
+                if not compressor:
+                    logger.warning("未能创建 Reranker Compressor。将跳过重排序步骤。")
+                    # 如果 reranker 创建失败，退回到无 reranker 的逻辑
+                    # 检查是否需要 BM25
+                    if self.use_bm25 and bm25_retriever:
+                        logger.info(
+                            "Reranker失败，但启用BM25。使用 EnsembleRetriever 组合 BM25 和基础向量检索器。"
+                        )
+                        final_retriever = EnsembleRetriever(
+                            retrievers=[bm25_retriever, base_retriever],
+                            weights=[0.5, 0.5],
+                        )
+                    else:
+                        logger.info(
+                            "Reranker失败，且未启用BM25。仅使用基础向量检索器。"
+                        )
+                        final_retriever = base_retriever
 
                 else:
-                    logger.warning(
-                        f"未知的 reranker_type: '{self.reranker_type}'。将不使用重排序。"
-                    )
-                    self.use_reranker = False  # 禁用重排序
-                    return base_retriever  # 返回基础检索器
-
-                # --- 如果成功创建了 compressor，则包装 Retriever ---
-                if compressor:
-                    compression_retriever = ContextualCompressionRetriever(
+                    # Compressor 创建成功，创建 ContextualCompressionRetriever
+                    reranked_vector_retriever = ContextualCompressionRetriever(
                         base_compressor=compressor, base_retriever=base_retriever
                     )
-                    logger.info("ContextualCompressionRetriever 创建成功。")
-                    return compression_retriever
+                    logger.info(
+                        "ContextualCompressionRetriever (重排序向量检索器) 创建成功。"
+                    )
+
+                    # 根据是否启用 BM25 组合
+                    if self.use_bm25 and bm25_retriever:
+                        logger.info(
+                            "启用重排序和BM25。使用 EnsembleRetriever 组合 BM25 和重排序后的向量检索器。"
+                        )
+                        # 组合 BM25 和 重排序后的向量检索器
+                        final_retriever = EnsembleRetriever(
+                            retrievers=[bm25_retriever, reranked_vector_retriever],
+                            weights=[
+                                0.5,
+                                0.5,
+                            ],  # weights 可以调整或移除，RRF(d) = Σ 1/(k + r_i)
+                        )
+                    else:
+                        logger.info(
+                            "启用重排序，但未启用BM25 (或BM25初始化失败)。仅使用重排序后的向量检索器。"
+                        )
+                        final_retriever = reranked_vector_retriever
+
+            except Exception as e:
+                logger.error(
+                    f"创建重排序 Compressor 或 ContextualCompressionRetriever 时出错: {e}",
+                    exc_info=True,
+                )
+                # 出错时，回退到基础检索器或 BM25+基础检索器
+                logger.warning("重排序流程出错，将回退。")
+                if self.use_bm25 and bm25_retriever:
+                    logger.info(
+                        "回退：使用 EnsembleRetriever 组合 BM25 和基础向量检索器。"
+                    )
+                    final_retriever = EnsembleRetriever(
+                        retrievers=[bm25_retriever, base_retriever], weights=[0.5, 0.5]
+                    )
                 else:
-                    # compressor 未能创建成功（理论上应该在上面处理了）
-                    logger.warning("未能创建 Reranker Compressor，返回基础检索器。")
-                    return base_retriever
+                    logger.info("回退：仅使用基础向量检索器。")
+                    final_retriever = base_retriever
 
+        else:
+            # --- 场景 B: 不使用重排序 ---
+            logger.info("重排序未启用。")
+            if self.use_bm25 and bm25_retriever:
+                logger.info(
+                    "未启用重排序，但启用BM25。使用 EnsembleRetriever 组合 BM25 和基础向量检索器。"
+                )
+                # 组合 BM25 和 基础向量检索器
+                final_retriever = EnsembleRetriever(
+                    retrievers=[bm25_retriever, base_retriever],
+                    weights=[0.5, 0.5],  # weights 可以调整或移除
+                )
             else:
-                # --- 不使用重排序 ---
-                logger.info("重排序未启用，返回基础检索器。")
-                return base_retriever
+                logger.info(
+                    "未启用重排序，且未启用BM25 (或BM25初始化失败)。仅使用基础向量检索器。"
+                )
+                final_retriever = base_retriever
 
-        except Exception as e:
-            error_msg = f"加载知识库 '{kb_id_str}' 或创建检索器时出错: {e}"
-            logger.error(error_msg, exc_info=True)
-            raise RuntimeError(error_msg) from e
+        logger.info(f"最终返回的检索器类型: {type(final_retriever)}")
+        return final_retriever
 
     @staticmethod
     def get_file_md5(file_path: str) -> str:
